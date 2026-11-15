@@ -178,6 +178,7 @@ func (v *Validador) TotalesImpuestos(campo string, declarados []TotalImpuesto, p
 		k := par{t.Codigo, t.CodigoPorcentaje}
 		v.Numero(p+"baseImponible", t.BaseImponible, 14, 2)
 		v.Numero(p+"valor", t.Valor, 14, 2)
+		v.DevolucionIVA(p+"valorDevolucionIva", t.ValorDevolucionIva)
 		total = total.Sumar(t.Valor)
 		if prev, repetido := acumulados[k]; repetido {
 			t.BaseImponible = t.BaseImponible.Sumar(prev.BaseImponible)
@@ -272,4 +273,23 @@ func GenerarClaveAcceso(it *InfoTributaria, fecha Fecha, codDoc, codigoNumerico 
 	}
 	it.ClaveAcceso = c
 	return c, nil
+}
+
+// DevolucionIVA rechaza un <valorDevolucionIva> mayor que cero.
+//
+// El Anexo 20 exige que ese valor sea el autorizado por los servicios web
+// de devolución automática del IVA (DIG) y que se reste del importe total
+// del comprobante. El SDK no implementa esos servicios ni ese descuento
+// (ver docs/devolucion-iva-dig.md), de modo que aceptar un valor positivo
+// produciría un comprobante con el importe total mal calculado, que además
+// el SRI rechazaría con el error 92. Hasta que DIG esté implementado, el
+// valor solo puede omitirse o ser cero.
+func (v *Validador) DevolucionIVA(campo string, valor *decimal.Decimal) {
+	if valor == nil {
+		return
+	}
+	v.Numero(campo, *valor, 14, 2)
+	if valor.Signo() > 0 {
+		v.Errorf(campo, "devolucion-iva.no-admitida", "la devolución automática del IVA (Anexo 20, servicios DIG) no está implementada: el SDK no descuenta este valor del importe total ni puede obtenerlo del SRI; omita el campo o use 0 (ver docs/devolucion-iva-dig.md)")
+	}
 }

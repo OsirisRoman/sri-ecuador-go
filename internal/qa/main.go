@@ -6,6 +6,7 @@
 //
 //	go run ./internal/qa -desde 113            # todos los escenarios
 //	go run ./internal/qa -desde 120 -solo sha1 # uno solo
+//	go run ./internal/qa -regresion            # sin conexión: revalida lo ya autorizado
 //
 // Los XML y un resumen se guardan en -dir (por defecto evidencia-privada/,
 // excluido de Git). La salida estándar no incluye datos del emisor.
@@ -228,7 +229,14 @@ func main() {
 	loteAlterar := flag.Bool("lote-alterar", false, "altera el segundo comprobante del lote después de firmarlo")
 	ret1Desde := flag.Int("ret1-desde", 0, "secuencial de comprobante de retención para probar la versión 1.0.0")
 	dir := flag.String("dir", "evidencia-privada", "directorio de evidencias (excluido de Git)")
+	soloRegresion := flag.Bool("regresion", false, "sin conexión: vuelve a validar con el SDK actual los comprobantes ya autorizados que hay en -dir")
 	flag.Parse()
+	if *soloRegresion {
+		if regresion(*dir) > 0 {
+			os.Exit(1)
+		}
+		return
+	}
 	if *desde < 1 {
 		fmt.Fprintln(os.Stderr, "indique -desde con el primer secuencial libre")
 		os.Exit(2)

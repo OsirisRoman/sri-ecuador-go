@@ -161,3 +161,17 @@ func TestEmitirContraElSimulador(t *testing.T) {
 		t.Fatalf("estado = %s %v", res.Estado, res.Mensajes)
 	}
 }
+
+func TestDevolucionIVANoAdmitida(t *testing.T) {
+	n := base(t, hoy)
+	cero := d("0.00")
+	n.InfoNotaDebito.Impuestos[0].ValorDevolucionIva = &cero
+	if hs := validar(n); len(hs) != 0 {
+		t.Fatalf("un valor cero debe admitirse: %v", hs)
+	}
+	valor := d("1.00")
+	n.InfoNotaDebito.Impuestos[0].ValorDevolucionIva = &valor
+	if hs := validar(n); !hs.Tiene("devolucion-iva.no-admitida") || hs.Err() == nil {
+		t.Fatalf("un valor positivo debe rechazarse: %v", hs)
+	}
+}

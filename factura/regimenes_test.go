@@ -183,3 +183,31 @@ func TestNegociable(t *testing.T) {
 		t.Errorf("correo inválido: %v", hs)
 	}
 }
+
+// Mientras la devolución automática del IVA (DIG) no esté implementada, un
+// valorDevolucionIva positivo se rechaza: el SDK no lo descuenta del importe
+// total y emitirlo daría un comprobante mal calculado.
+func TestDevolucionIVANoAdmitida(t *testing.T) {
+	f := base(t)
+	importe := f.InfoFactura.ImporteTotal
+	cero := d("0.00")
+	f.InfoFactura.TotalConImpuestos[0].ValorDevolucionIva = &cero
+	if hs := validar(f); len(hs) != 0 {
+		t.Fatalf("un valor cero debe admitirse: %v", hs)
+	}
+	valor := d("1.50")
+	f.InfoFactura.TotalConImpuestos[0].ValorDevolucionIva = &valor
+	hs := validar(f)
+	if !hs.Tiene("devolucion-iva.no-admitida") || hs.Err() == nil {
+		t.Fatalf("un valor positivo debe rechazarse: %v", hs)
+	}
+	// Calcular conserva el valor declarado y no altera el importe: la
+	// protección está en la validación, que es la que impide emitir.
+	f.Calcular()
+	if !f.InfoFactura.ImporteTotal.Igual(importe) {
+		t.Errorf("importe = %s", f.InfoFactura.ImporteTotal)
+	}
+	if hs := validar(f); !hs.Tiene("devolucion-iva.no-admitida") {
+		t.Errorf("tras Calcular debe seguir rechazándose: %v", hs)
+	}
+}

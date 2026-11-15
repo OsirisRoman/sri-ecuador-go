@@ -9,7 +9,6 @@ import (
 	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
 	"github.com/OsirisRoman/sri-ecuador-go/factura"
-	"github.com/OsirisRoman/sri-ecuador-go/internal/certprueba"
 	"github.com/OsirisRoman/sri-ecuador-go/sritest"
 	"github.com/OsirisRoman/sri-ecuador-go/ws"
 )
@@ -18,13 +17,13 @@ import (
 // una aplicación real el certificado se carga con certificado.CargarArchivo
 // y no se sustituyen los Servicios.
 func Example() {
-	material, _ := certprueba.Obtener() // certificado desechable de pruebas
+	cert, _ := sritest.CertificadoDePrueba() // certificado desechable de pruebas
 	simulador := sritest.Nuevo()
 	defer simulador.Cerrar()
 
 	cliente, err := sri.Nuevo(sri.Config{
 		Ambiente:    comprobante.Pruebas,
-		Certificado: material.Certificado,
+		Certificado: cert,
 		Servicios:   ws.Nuevo(comprobante.Pruebas, ws.ConEndpoints(simulador.Endpoints())),
 		Espera:      sri.Espera{Inicial: time.Millisecond, Intervalo: time.Millisecond, Consultas: 3},
 	})

@@ -72,7 +72,9 @@ type Impuesto struct {
 	Tarifa           decimal.Decimal `xml:"tarifa"`
 	BaseImponible    decimal.Decimal `xml:"baseImponible"`
 	Valor            decimal.Decimal `xml:"valor"`
-	// ValorDevolucionIva es el monto de devolución automática de IVA
+	// ValorDevolucionIva solo puede omitirse o ser cero: Validar rechaza un
+	// valor positivo porque el SDK no implementa la devolución automática
+	// del IVA (ver comprobante.Validador.DevolucionIVA). Es el monto de devolución automática de IVA
 	// autorizado por el servicio DIG del SRI (Anexo 20). El SRI lo contrasta
 	// y rechaza con el error 92 si no coincide.
 	ValorDevolucionIva *decimal.Decimal `xml:"valorDevolucionIva,omitempty"`
@@ -254,9 +256,7 @@ func (n *NotaDebito) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 	esperado, bases := info.TotalSinImpuestos, decimal.Cero
 	for i, imp := range info.Impuestos {
 		v.ImpuestoLinea(fmt.Sprintf("%simpuestos[%d].", p, i), imp.comun())
-		if imp.ValorDevolucionIva != nil {
-			v.Numero(fmt.Sprintf("%simpuestos[%d].valorDevolucionIva", p, i), *imp.ValorDevolucionIva, 14, 2)
-		}
+		v.DevolucionIVA(fmt.Sprintf("%simpuestos[%d].valorDevolucionIva", p, i), imp.ValorDevolucionIva)
 		esperado = esperado.Sumar(imp.Valor)
 		if imp.Codigo == comprobante.ImpuestoIVA {
 			bases = bases.Sumar(imp.BaseImponible)
