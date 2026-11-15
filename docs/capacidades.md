@@ -9,7 +9,7 @@ Leyenda: ✅ implementado y probado · 🚧 parcial · ⏳ pendiente.
 | Factura: modelo tipado v1.0.0 / 1.1.0 / 2.0.0 / 2.1.0 | ✅ | Incluye exportación, reembolsos, retenciones, rubros de terceros, sustitutiva de guía, negociable, máquina fiscal |
 | Factura: serialización y lectura XML | ✅ | Ida y vuelta sin pérdida sobre los ejemplos oficiales del SRI |
 | Factura: cálculo de totales | ✅ | IVA; ICE/IRBPNR ad valorem. Tarifas específicas de ICE: el usuario indica el valor |
-| Factura: reglas de validación | 🚧 | Núcleo completo. Sin reglas específicas aún para exportación, reembolsos, combustibles (Anexos 12/16), transporte (25) |
+| Factura: reglas de validación | ✅ | Núcleo, exportación (Anexo 4) y reembolsos (Anexo 5), ambas **autorizadas** en pruebas; negociable (Anexo 11). Combustibles (12/16) y transporte (25) como advertencias. Sin reglas para fundas plásticas (18), materiales de construcción (23) ni gran contribuyente (24): el SDK no puede reconocer esos casos |
 | Validación XSD | ✅ | 16 esquemas oficiales incrustados (todos los comprobantes) |
 | Certificados PKCS#12 | ✅ | Cifrados moderno y heredados; archivos con varias claves. Sin tokens USB/PKCS#11 |
 | Firma XAdES-BES | ✅ | SHA-256 (por defecto) y SHA-1, ambas autorizadas por el SRI; verificada con xmlsec1 |

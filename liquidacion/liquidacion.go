@@ -33,7 +33,7 @@ const (
 
 // CodDocReembolso es el valor de codDocReembolso cuando la liquidación
 // incluye reembolsos de gastos.
-const CodDocReembolso = "41"
+const CodDocReembolso = factura.CodDocReembolso
 
 // Detalle es una línea de la liquidación; es el mismo tipo que el de la
 // factura, de modo que factura.LineaIVA sirve para construirlo.
@@ -129,17 +129,6 @@ func (l *LiquidacionCompra) impuestosPorLinea() [][]comprobante.Impuesto {
 	return out
 }
 
-// totalesReembolso suma las bases y los impuestos de los reembolsos.
-func (l *LiquidacionCompra) totalesReembolso() (base, impuesto decimal.Decimal) {
-	for _, r := range l.Reembolsos {
-		for _, di := range r.DetalleImpuestos {
-			base = base.Sumar(di.BaseImponibleReembolso)
-			impuesto = impuesto.Sumar(di.ImpuestoReembolso)
-		}
-	}
-	return base.Redondear(2), impuesto.Redondear(2)
-}
-
 // Calcular completa los importes derivados de los detalles (total de cada
 // línea, impuestos, totalSinImpuestos, totalDescuento, totalConImpuestos e
 // importeTotal), los totales de reembolso si hay reembolsos y el total del
@@ -181,7 +170,7 @@ func (l *LiquidacionCompra) Calcular() {
 	info.ImporteTotal = total.Redondear(2)
 
 	if len(l.Reembolsos) > 0 {
-		base, imp := l.totalesReembolso()
+		base, imp := factura.TotalesReembolso(l.Reembolsos)
 		suma := base.Sumar(imp)
 		info.CodDocReembolso = CodDocReembolso
 		info.TotalBaseImponibleReembolso, info.TotalImpuestoReembolso, info.TotalComprobantesReembolso = &base, &imp, &suma
@@ -268,7 +257,9 @@ func (l *LiquidacionCompra) ValidarCon(op OpcionesValidacion) comprobante.Hallaz
 	}
 
 	// --- Reembolsos -----------------------------------------------------------
-	l.validarReembolsos(v)
+	factura.ValidarReembolsos(v, p, factura.DatosReembolso{CodDocReembolso: info.CodDocReembolso,
+		TotalComprobantesReembolso: info.TotalComprobantesReembolso, TotalBaseImponibleReembolso: info.TotalBaseImponibleReembolso,
+		TotalImpuestoReembolso: info.TotalImpuestoReembolso}, l.Reembolsos, false)
 
 	v.Pagos(p+"pagos", info.Pagos, info.ImporteTotal, true)
 	if l.TipoNegociable != nil {
@@ -276,49 +267,4 @@ func (l *LiquidacionCompra) ValidarCon(op OpcionesValidacion) comprobante.Hallaz
 	}
 	v.Adicionales(l.InfoAdicional, l.MaquinaFiscal)
 	return v.Hallazgos()
-}
-
-func (l *LiquidacionCompra) validarReembolsos(v *comprobante.Validador) {
-	info := &l.InfoLiquidacionCompra
-	const p = "infoLiquidacionCompra."
-	declarados := info.CodDocReembolso != "" || info.TotalComprobantesReembolso != nil ||
-		info.TotalBaseImponibleReembolso != nil || info.TotalImpuestoReembolso != nil
-	if len(l.Reembolsos) == 0 {
-		if info.CodDocReembolso == CodDocReembolso {
-			v.Errorf("reembolsos", "requerido", "codDocReembolso es %s pero no hay reembolsos", CodDocReembolso)
-		}
-		return
-	}
-	if !declarados || info.CodDocReembolso != CodDocReembolso {
-		v.Errorf(p+"codDocReembolso", "reembolso.codigo", "con reembolsos debe ser %s; use Calcular", CodDocReembolso)
-	}
-	for i, r := range l.Reembolsos {
-		q := fmt.Sprintf("reembolsos[%d].", i)
-		v.Texto(q+"identificacionProveedorReembolso", r.IdentificacionProveedorReembolso, true, 20)
-		v.Digitos(q+"estabDocReembolso", r.EstabDocReembolso, 3)
-		v.Digitos(q+"ptoEmiDocReembolso", r.PtoEmiDocReembolso, 3)
-		v.Digitos(q+"secuencialDocReembolso", r.SecuencialDocReembolso, 9)
-		if r.FechaEmisionDocReembolso.EsCero() {
-			v.Errorf(q+"fechaEmisionDocReembolso", "requerido", "es obligatoria")
-		}
-		if len(r.DetalleImpuestos) == 0 {
-			v.Errorf(q+"detalleImpuestos", "requerido", "cada reembolso debe declarar al menos un impuesto")
-		}
-		if len(r.CompensacionesReembolso) > 0 {
-			v.Errorf(q+"compensacionesReembolso", "version", "la liquidación de compra no admite compensaciones en los reembolsos")
-		}
-		for j, di := range r.DetalleImpuestos {
-			v.Numero(fmt.Sprintf("%sdetalleImpuestos[%d].baseImponibleReembolso", q, j), di.BaseImponibleReembolso, 14, 2)
-			v.Numero(fmt.Sprintf("%sdetalleImpuestos[%d].impuestoReembolso", q, j), di.ImpuestoReembolso, 14, 2)
-		}
-	}
-	base, imp := l.totalesReembolso()
-	comparar := func(campo string, declarado *decimal.Decimal, esperado decimal.Decimal) {
-		if declarado == nil || !declarado.Igual(esperado) {
-			v.Errorf(p+campo, "reembolso.totales", "debe ser %s (suma de los reembolsos)", esperado)
-		}
-	}
-	comparar("totalBaseImponibleReembolso", info.TotalBaseImponibleReembolso, base)
-	comparar("totalImpuestoReembolso", info.TotalImpuestoReembolso, imp)
-	comparar("totalComprobantesReembolso", info.TotalComprobantesReembolso, base.Sumar(imp))
 }
