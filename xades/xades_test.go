@@ -239,3 +239,15 @@ func TestNombreRFC2253(t *testing.T) {
 		t.Errorf("nombre = %s", got)
 	}
 }
+
+// El valor cero de Opciones firma con RSA-SHA256.
+func TestAlgoritmoPorDefecto(t *testing.T) {
+	out, err := Firmar([]byte(facturaMinima), mat(t).Certificado, &Opciones{Momento: momento})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := Verificar(out, nil)
+	if err != nil || f.AlgoritmoFirma != AlgRSASHA256 {
+		t.Errorf("algoritmo por defecto = %v %v", f, err)
+	}
+}

@@ -192,7 +192,7 @@ type Config struct {
 	// Certificado de firma. Puede ser nil si solo se van a consultar
 	// autorizaciones o a enviar documentos ya firmados.
 	Certificado *certificado.Certificado
-	// Algoritmo de firma; por defecto xades.SHA1 (ficha técnica 6.8).
+	// Algoritmo de firma; por defecto xades.SHA256.
 	Algoritmo xades.Algoritmo
 	// RUC del emisor. Si se indica, el Cliente se niega a firmar
 	// comprobantes de otro RUC.

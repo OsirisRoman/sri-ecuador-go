@@ -6,8 +6,9 @@ Cada entrada indica qué se decidió, por qué y qué alternativa se descartó. 
 `encoding/xml` descarta los prefijos y no canonicaliza. En lugar de sumar `etree` + `goxmldsig` (como las referencias en Go), `internal/xmldom` implementa en ~450 líneas un árbol que conserva prefijos y la canonicalización C14N 1.0 inclusiva, que es la única que usa el perfil del SRI.
 *Verificación:* casos de la recomendación C14N, y firmas validadas por una implementación independiente (`xmlsec1`/OpenSSL).
 
-## D2. Firma: estructura del Anexo 14, RSA-SHA1 por defecto (revisable)
-La ficha (6.8) dice literalmente «Algoritmo de firmado: RSA-SHA1» y el Anexo 14 muestra SHA-1 en firma y digest. SHA-1 está en desuso criptográfico, y al menos una referencia (Open-SRI, vía `xades4j`) firma con SHA-256. Se implementan ambos; **el valor por defecto es el normativo (SHA-1)** hasta contar con evidencia real del ambiente de certificación. Ver `docs/pruebas-sri.md`.
+## D2. Firma: estructura del Anexo 14, RSA-SHA256 por defecto
+La ficha (6.8) dice literalmente «Algoritmo de firmado: RSA-SHA1» y el Anexo 14 muestra SHA-1 en firma y digest. SHA-1 está en desuso criptográfico. Se planteó como experimento: el 2026-11-14 el ambiente de certificación del SRI **autorizó** una factura firmada por este SDK con RSA-SHA256 (firma y los tres digest en SHA-256). Con esa evidencia, y por decisión del propietario del proyecto, **SHA-256 es el valor por defecto**.
+RSA-SHA1 sigue disponible (`xades.SHA1`) por ser el algoritmo que nombra la norma; su aceptación por el SRI real no se ha probado con este SDK.
 La firma lleva las tres referencias del Anexo 14 (SignedProperties, KeyInfo y comprobante) y nunca se entrega sin pasar la verificación del propio SDK.
 
 ## D3. `X509IssuerName` con formato RFC 2253 al estilo Java
@@ -23,10 +24,10 @@ Un entero de precisión arbitraria con escala. Sin dependencia externa porque so
 El SRI asigna RUC que no cumplen el módulo 11 clásico; exigirlo rechazaría contribuyentes reales. Se valida forma y provincia. La cédula con dígito incorrecto es *advertencia*, igual que en el SRI (código 62).
 
 ## D7. Ajustes a los XSD publicados, explícitos y en memoria
-El XSD publicado solo admite `CONTRIBUYENTE RÉGIMEN RIMPE`, pero el Anexo 22 exige además `CONTRIBUYENTE NEGOCIO POPULAR - RÉGIMEN RIMPE`. Los archivos se incrustan intactos; la corrección se aplica al cargar y está declarada en `esquema.Ajustes`. `esquema.ValidarEstricto` usa los archivos literales. **(revisable)**: falta confirmar con el SRI real.
+El XSD publicado solo admite `CONTRIBUYENTE RÉGIMEN RIMPE`, pero el Anexo 22 exige además `CONTRIBUYENTE NEGOCIO POPULAR - RÉGIMEN RIMPE`. Los archivos se incrustan intactos; la corrección se aplica al cargar y está declarada en `esquema.Ajustes`. `esquema.ValidarEstricto` usa los archivos literales. **(revisable)**: falta confirmar con el SRI real, lo que requiere un emisor que sea negocio popular.
 
 ## D8. Reintentar el envío es seguro
-Reenviar un comprobante ya recibido no lo duplica: el SRI responde 43 o 70. El cliente lo interpreta como «ya recibido» y pasa a consultar la autorización, lo que hace idempotente a `Reanudar`.
+Reenviar un comprobante ya recibido no lo duplica: el SRI responde 43 o 70 (el 43 está confirmado con el SRI real). El cliente lo interpreta como «ya recibido» y pasa a consultar la autorización, lo que hace idempotente a `Reanudar`.
 
 ## D9. El ambiente es obligatorio y se comprueba
 `sri.Config.Ambiente` no tiene valor por defecto y el cliente rechaza comprobantes de otro ambiente. Un ambiente desconocido nunca resuelve a las direcciones de producción.

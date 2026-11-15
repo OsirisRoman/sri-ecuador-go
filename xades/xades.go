@@ -21,9 +21,9 @@
 //
 // # Algoritmos
 //
-// La ficha técnica (6.8) especifica RSA-SHA1, y esa es la opción por
-// defecto. SHA-256 está disponible como alternativa; qué acepta realmente
-// el SRI se documenta en docs/pruebas-sri.md a partir de pruebas reales.
+// Por defecto se firma con RSA-SHA256, que el SRI autoriza (comprobado en
+// su ambiente de certificación). La ficha técnica (6.8) nombra RSA-SHA1,
+// disponible con Opciones{Algoritmo: SHA1}. Ver docs/decisiones.md (D2).
 package xades
 
 import (
@@ -66,24 +66,28 @@ const (
 type Algoritmo int
 
 const (
-	// SHA1 es RSA-SHA1, el algoritmo que especifica la ficha técnica (6.8).
-	SHA1 Algoritmo = iota
-	// SHA256 es RSA-SHA256.
-	SHA256
+	// SHA256 es RSA-SHA256, el valor por defecto. El ambiente de
+	// certificación del SRI autoriza comprobantes firmados así (prueba
+	// real del 2026-11-14, docs/pruebas-sri.md).
+	SHA256 Algoritmo = iota
+	// SHA1 es RSA-SHA1, el algoritmo que nombra la ficha técnica (6.8) y
+	// que usa su Anexo 14. Se conserva por compatibilidad; SHA-1 está en
+	// desuso criptográfico.
+	SHA1
 )
 
 func (a Algoritmo) String() string {
-	if a == SHA256 {
-		return "RSA-SHA256"
+	if a == SHA1 {
+		return "RSA-SHA1"
 	}
-	return "RSA-SHA1"
+	return "RSA-SHA256"
 }
 
 func (a Algoritmo) uris() (firma, digest string, h crypto.Hash) {
-	if a == SHA256 {
-		return AlgRSASHA256, AlgSHA256, crypto.SHA256
+	if a == SHA1 {
+		return AlgRSASHA1, AlgSHA1, crypto.SHA1
 	}
-	return AlgRSASHA1, AlgSHA1, crypto.SHA1
+	return AlgRSASHA256, AlgSHA256, crypto.SHA256
 }
 
 // Errores de firma.
@@ -94,10 +98,10 @@ var (
 	ErrCertificado = errors.New("xades: certificado de firma ausente")
 )
 
-// Opciones ajusta la firma. El valor cero es válido y firma con RSA-SHA1 en
-// el instante actual.
+// Opciones ajusta la firma. El valor cero es válido y firma con RSA-SHA256
+// en el instante actual.
 type Opciones struct {
-	// Algoritmo de resumen; por defecto SHA1 (ficha técnica 6.8).
+	// Algoritmo de resumen; por defecto SHA256.
 	Algoritmo Algoritmo
 	// Momento es el valor de SigningTime; por defecto, ahora. Se escribe con
 	// el desplazamiento horario de Ecuador continental (−05:00).

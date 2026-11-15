@@ -15,18 +15,30 @@ Este documento registra **resultados reales**, con sus condiciones. Lo que no se
 
 ## Ambiente de certificación del SRI (`celcer.sri.gob.ec`)
 
-**Pendiente.** Hasta ahora solo se han descargado los WSDL públicos; no se ha enviado ningún comprobante.
+### Ronda 1 — 2026-11-14
 
-Plan de la primera ronda (requiere autorización del titular del certificado):
+Condiciones: emisor persona natural habilitado en pruebas; certificado del Banco Central del Ecuador (RSA 2048, cadena de 4 certificados en el `.p12`); factura v1.1.0 a consumidor final, un detalle de USD 1,00 con IVA 15 %, pago en efectivo; SDK en la rama `feat/flujo-factura`. Los datos del emisor y las claves de acceso se omiten.
 
-| # | Experimento | Pregunta que responde |
-|---|---|---|
-| 1 | Factura mínima v1.1.0, firma RSA-SHA1 | ¿El SRI recibe y **autoriza** la firma del SDK con el algoritmo normativo? |
-| 2 | Igual, firma RSA-SHA256 | ¿SHA-256 es aceptado? (decide la recomendación D2) |
-| 3 | Reenvío del comprobante 1 ya autorizado | ¿Responde 43 como se supone en D8? |
-| 4 | Consulta de validez de la clave 1 | Forma real de la respuesta de `ConsultaComprobante` |
+| # | Operación | Validación local | Firma verificada | Recepción | Autorización |
+|---|---|---|---|---|---|
+| 1 | Factura firmada con **RSA-SHA256** | ✅ reglas y XSD | ✅ | `RECIBIDA` | **`AUTORIZADO`** |
+| 2 | Reenvío del mismo documento ya autorizado | — | — | `DEVUELTA`, error **43** «CLAVE ACCESO REGISTRADA» | sigue `AUTORIZADO` |
+| 3 | Consulta de autorización por clave | — | — | — | `AUTORIZADO`, con fecha |
+| 4 | Consulta de validez (`ConsultaComprobante`) | — | — | — | `estadoAutorizacion=AUTORIZADO`, `tipoComprobante=Factura` |
 
-Para cada uno se registrará por separado: validación local, firma verificada, RECIBIDA y AUTORIZADO, con las respuestas sanitizadas.
+Observaciones:
+
+- El comprobante que el SRI devuelve dentro de la autorización es **idéntico byte a byte** al enviado: la serialización canónica del SDK no es alterada por el SRI.
+- El número de autorización es la clave de acceso (ficha 5.9) y el ambiente devuelto es `PRUEBAS`.
+- El reenvío se resolvió sin intervención: `Reanudar` interpretó el 43 como «ya recibido» y obtuvo la autorización (decisión D8).
+- En la consulta de validez satisfactoria, `estadoConsulta` llega vacío.
+
+Qué **no** demuestra esta ronda:
+
+- **RSA-SHA1 no se envió al SRI.** Tras autorizarse SHA-256 no hizo falta; su aceptación real sigue sin probar con este SDK.
+- Un solo certificado (BCE) y un solo tipo de emisor. Certificados de otras entidades (Security Data, ANF, Uanataca…) pueden tener emisores con atributos distintos en `X509IssuerName`.
+- Solo factura 1.1.0 mínima: sin ICE, descuentos, crédito, exportación ni las versiones 1.0.0 / 2.x.
+- No se ha visto un `NO AUTORIZADO` real ni un comprobante en procesamiento prolongado.
 
 ## Producción
 

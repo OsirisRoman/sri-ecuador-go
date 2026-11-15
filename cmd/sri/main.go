@@ -39,6 +39,7 @@ const uso = `Uso: sri <orden> [opciones]
   factura-prueba           Genera una factura mínima de prueba; con -enviar la envía
   enviar   <firmado.xml>   Envía un comprobante firmado y espera su autorización
   autorizacion <clave>     Consulta la autorización de una clave de acceso
+  estado <clave>           Consulta de validez (AUTORIZADO, ANULADO, …)
 
 Configuración (variables de entorno o archivo .env; ver .env.example):
   SRI_P12_PATH, SRI_P12_PASSWORD o SRI_P12_PASSWORD_FILE, SRI_EMISOR_*
@@ -66,6 +67,8 @@ func main() {
 		err = cmdEnviar(args)
 	case "autorizacion":
 		err = cmdAutorizacion(args)
+	case "estado":
+		err = cmdEstado(args)
 	case "-h", "--help", "ayuda":
 		fmt.Print(uso)
 	default:
@@ -189,10 +192,10 @@ func cmdValidar(args []string) error {
 
 func algoritmo(nombre string) (xades.Algoritmo, error) {
 	switch strings.ToLower(nombre) {
-	case "sha1", "":
-		return xades.SHA1, nil
-	case "sha256":
+	case "sha256", "":
 		return xades.SHA256, nil
+	case "sha1":
+		return xades.SHA1, nil
 	}
 	return 0, fmt.Errorf("algoritmo %q desconocido (sha1 o sha256)", nombre)
 }
@@ -200,7 +203,7 @@ func algoritmo(nombre string) (xades.Algoritmo, error) {
 func cmdFirmar(args []string) error {
 	fs := flag.NewFlagSet("firmar", flag.ExitOnError)
 	salida := fs.String("salida", "", "archivo de salida (por defecto, <entrada>.firmado.xml)")
-	alg := fs.String("algoritmo", "sha1", "sha1 o sha256")
+	alg := fs.String("algoritmo", "sha256", "sha256 o sha1")
 	fs.Parse(args)
 	doc, ruta, err := leerArg(fs.Args())
 	if err != nil {
@@ -257,7 +260,7 @@ func nuevoCliente(c *certificado.Certificado, a xades.Algoritmo) (*sri.Cliente, 
 
 func cmdFacturaPrueba(args []string) error {
 	fs := flag.NewFlagSet("factura-prueba", flag.ExitOnError)
-	alg := fs.String("algoritmo", "sha1", "sha1 o sha256")
+	alg := fs.String("algoritmo", "sha256", "sha256 o sha1")
 	secuencial := fs.Int("secuencial", 0, "número secuencial (obligatorio, 1-999999999)")
 	version := fs.String("version", factura.VersionPorDefecto, "versión del esquema de factura")
 	enviar := fs.Bool("enviar", false, "envía la factura al ambiente de PRUEBAS del SRI (sin esta opción solo se genera y firma)")
@@ -341,6 +344,12 @@ func emitir(cli *sri.Cliente, firmado []byte, base string) error {
 	defer cancelar()
 	res, err := cli.Reanudar(ctx, firmado, nil)
 	if res != nil {
+		if rec := res.Recepcion; rec != nil {
+			fmt.Printf("recepción: %s\n", rec.Estado)
+			for _, m := range rec.Mensajes() {
+				fmt.Printf("  %s %s\n", m.Tipo, m)
+			}
+		}
 		fmt.Printf("estado: %s\n", res.Estado)
 		for _, m := range res.Mensajes {
 			fmt.Printf("  %s %s\n", m.Tipo, m)
@@ -366,7 +375,7 @@ func cmdEnviar(args []string) error {
 	if _, err := xades.Verificar(doc, nil); err != nil {
 		return fmt.Errorf("no se envía: %w", err)
 	}
-	cli, err := nuevoCliente(nil, xades.SHA1)
+	cli, err := nuevoCliente(nil, xades.SHA256)
 	if err != nil {
 		return err
 	}
@@ -377,7 +386,7 @@ func cmdAutorizacion(args []string) error {
 	if len(args) != 1 {
 		return errors.New("indique la clave de acceso")
 	}
-	cli, err := nuevoCliente(nil, xades.SHA1)
+	cli, err := nuevoCliente(nil, xades.SHA256)
 	if err != nil {
 		return err
 	}
@@ -392,6 +401,28 @@ func cmdAutorizacion(args []string) error {
 		fmt.Println("fecha: ", t.Format(time.RFC3339))
 	}
 	for _, m := range res.Mensajes {
+		fmt.Printf("  %s %s\n", m.Tipo, m)
+	}
+	return nil
+}
+
+func cmdEstado(args []string) error {
+	if len(args) != 1 {
+		return errors.New("indique la clave de acceso")
+	}
+	cli, err := nuevoCliente(nil, xades.SHA256)
+	if err != nil {
+		return err
+	}
+	ctx, cancelar := context.WithTimeout(context.Background(), time.Minute)
+	defer cancelar()
+	e, err := cli.Servicios().ConsultarEstado(ctx, args[0])
+	if err != nil {
+		return err
+	}
+	fmt.Printf("estadoConsulta: %q\nestadoAutorizacion: %q\ntipoComprobante: %q\nrucEmisor: %q\nfechaAutorizacion: %q\n",
+		e.EstadoConsulta, e.EstadoAutorizacion, e.TipoComprobante, e.RucEmisor, e.FechaAutorizacion)
+	for _, m := range e.Mensajes {
 		fmt.Printf("  %s %s\n", m.Tipo, m)
 	}
 	return nil

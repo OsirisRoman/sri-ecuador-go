@@ -2,7 +2,7 @@
 
 SDK de código abierto, nativo en Go, para la **facturación electrónica del SRI de Ecuador** (esquema offline): modelos tipados, validación XSD real, firma XAdES-BES y clientes SOAP de recepción y autorización.
 
-> **Estado: en desarrollo activo (pre-1.0).** El flujo completo de la **factura** funciona y está probado contra un simulador del SRI incluido en el SDK. La validación contra el ambiente de certificación real del SRI está en curso; consulte [docs/pruebas-sri.md](docs/pruebas-sri.md) antes de usarlo para emitir. La API puede cambiar.
+> **Estado: en desarrollo activo (pre-1.0).** El flujo completo de la **factura** funciona: el ambiente de certificación del SRI ya **autorizó** una factura generada y firmada con este SDK. Las pruebas reales cubren todavía pocos casos; consulte [docs/pruebas-sri.md](docs/pruebas-sri.md) para saber qué está comprobado y qué no. La API puede cambiar.
 
 - Go puro, **sin cgo**, sin Java, sin Node.js, sin base de datos.
 - Tres dependencias de ejecución (XSD, PKCS#12 y `x/crypto`).
