@@ -122,7 +122,7 @@ El RIDE puede regenerarse en cualquier momento a partir del XML autorizado; no e
 
 **Nota de débito.** Lista de `Motivos` con su valor y los impuestos sobre el total (`notadebito.ImpuestoIVA(comprobante.IVA15)`).
 
-**Comprobante de retención (v2.0.0).** Un `DocSustento` por comprobante de compra, con sus `ImpuestosDocSustento` y sus `Retenciones`. El porcentaje de cada retención debe ser el que el SRI tiene parametrizado para el código; `Validar` avisa si no coincide con el catálogo incluido, que caduca (ver `actualizar-catalogos.md`).
+**Comprobante de retención.** Use la versión 2.0.0 (`retencion.ComprobanteRetencion`); la 1.0.0 (`retencion.ComprobanteV1`) existe para sistemas que aún la emiten. Un `DocSustento` por comprobante de compra, con sus `ImpuestosDocSustento` y sus `Retenciones`. El porcentaje de cada retención debe ser el que el SRI tiene parametrizado para el código; `Validar` avisa si no coincide con el catálogo incluido, que caduca (ver `actualizar-catalogos.md`).
 
 **Guía de remisión.** No tiene fecha de emisión propia: `GenerarClaveAcceso` usa la de inicio del transporte. Para emitir hoy una guía de un traslado futuro use `GenerarClaveAccesoEn(comprobante.Hoy(), "")`. El transporte no puede empezar antes de la fecha de emisión.
 

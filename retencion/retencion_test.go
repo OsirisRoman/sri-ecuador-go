@@ -192,8 +192,8 @@ func TestEmitirContraElSimulador(t *testing.T) {
 	}
 }
 
-// El catálogo de renta reproduce el rechazo real del SRI: el código 312 al
-// 1,75 % fue devuelto con el error 52 porque el parametrizado es 2 %.
+// El SRI rechaza con el error 52 el código 312 al 1,75 %: su porcentaje
+// parametrizado es 2 %.
 func TestCatalogoRenta(t *testing.T) {
 	c312, ok := retencion.BuscarConceptoRenta("312")
 	if !ok || !c312.Admite(d("2")) || !c312.Admite(d("2.00")) || c312.Admite(d("1.75")) {

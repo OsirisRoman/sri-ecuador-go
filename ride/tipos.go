@@ -256,6 +256,43 @@ func nombreImpuestoRetenido(codigo string) string {
 	return codigo
 }
 
+var columnasRetencion = []columna{
+	{"Comprobante", 12, izquierda}, {"Número", 18, izquierda}, {"Fecha Emisión", 11, centro}, {"Ejercicio Fiscal", 9, centro},
+	{"Base Imponible para la Retención", 12, derecha}, {"Impuesto", 9, centro}, {"Código", 8, centro},
+	{"Porcentaje Retención", 10, derecha}, {"Valor Retenido", 11, derecha},
+}
+
+func deRetencionV1(doc []byte) (*modelo, error) {
+	c, err := retencion.ParseV1(doc)
+	if err != nil {
+		return nil, err
+	}
+	i := c.InfoCompRetencion
+	sujeto := [][]par{
+		{{"Razón Social / Nombres y Apellidos", i.RazonSocialSujetoRetenido}},
+		{{"Identificación", i.IdentificacionSujetoRetenido}, {"Fecha Emisión", i.FechaEmision.String()}},
+	}
+	var filas [][]string
+	for _, r := range c.Impuestos {
+		fecha := ""
+		if r.FechaEmisionDocSustento != nil {
+			fecha = r.FechaEmisionDocSustento.String()
+		}
+		filas = append(filas, []string{nombreDocumento(r.CodDocSustento), numeroConGuiones(r.NumDocSustento), fecha, i.PeriodoFiscal,
+			r.BaseImponible.String(), nombreImpuestoRetenido(r.Codigo), r.CodigoRetencion, r.PorcentajeRetener.String(), r.ValorRetenido.String()})
+	}
+	return &modelo{
+		titulo: "COMPROBANTE DE RETENCIÓN", it: c.InfoTributaria,
+		nombre: "Comprobante de retención", receptor: i.RazonSocialSujetoRetenido,
+		dirEstablecimiento: i.DirEstablecimiento, contribuyenteEspecial: i.ContribuyenteEspecial, obligado: i.ObligadoContabilidad,
+		adicional: c.InfoAdicional, totales: []par{{"TOTAL RETENIDO", c.TotalRetenido().String()}},
+		bloques: []func(*lienzo){
+			func(l *lienzo) { l.caja(sujeto) },
+			func(l *lienzo) { l.tabla(margen, anchoUtil, columnasRetencion, filas); l.y += separa },
+		},
+	}, nil
+}
+
 func deRetencion(doc []byte) (*modelo, error) {
 	c, err := retencion.Parse(doc)
 	if err != nil {
@@ -276,11 +313,6 @@ func deRetencion(doc []byte) (*modelo, error) {
 			total = total.Sumar(r.ValorRetenido)
 		}
 	}
-	cols := []columna{
-		{"Comprobante", 12, izquierda}, {"Número", 18, izquierda}, {"Fecha Emisión", 11, centro}, {"Ejercicio Fiscal", 9, centro},
-		{"Base Imponible para la Retención", 12, derecha}, {"Impuesto", 9, centro}, {"Código", 8, centro},
-		{"Porcentaje Retención", 10, derecha}, {"Valor Retenido", 11, derecha},
-	}
 	return &modelo{
 		titulo: "COMPROBANTE DE RETENCIÓN", it: c.InfoTributaria,
 		nombre: "Comprobante de retención", receptor: i.RazonSocialSujetoRetenido,
@@ -288,7 +320,7 @@ func deRetencion(doc []byte) (*modelo, error) {
 		adicional: c.InfoAdicional, totales: []par{{"TOTAL RETENIDO", total.Redondear(2).String()}},
 		bloques: []func(*lienzo){
 			func(l *lienzo) { l.caja(sujeto) },
-			func(l *lienzo) { l.tabla(margen, anchoUtil, cols, filas); l.y += separa },
+			func(l *lienzo) { l.tabla(margen, anchoUtil, columnasRetencion, filas); l.y += separa },
 		},
 	}, nil
 }

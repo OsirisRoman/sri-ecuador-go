@@ -31,6 +31,7 @@ import (
 	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
 	"github.com/OsirisRoman/sri-ecuador-go/esquema"
 	"github.com/OsirisRoman/sri-ecuador-go/internal/pdf"
+	"github.com/OsirisRoman/sri-ecuador-go/retencion"
 )
 
 // Opciones ajusta Generar. El valor cero es válido.
@@ -266,7 +267,7 @@ func leer(doc []byte) (*modelo, error) {
 		doc = []byte(strings.TrimSpace(e.Comprobante))
 		numAut, fechaAut = strings.TrimSpace(e.NumeroAutorizacion), strings.TrimSpace(e.FechaAutorizacion)
 	}
-	tipo, _, err := esquema.Identificar(doc)
+	tipo, version, err := esquema.Identificar(doc)
 	if err != nil {
 		return nil, fmt.Errorf("ride: %w", err)
 	}
@@ -279,7 +280,11 @@ func leer(doc []byte) (*modelo, error) {
 	case esquema.NotaDebito:
 		m, err = deNotaDebito(doc)
 	case esquema.ComprobanteRetencion:
-		m, err = deRetencion(doc)
+		if version == retencion.VersionV1 {
+			m, err = deRetencionV1(doc)
+		} else {
+			m, err = deRetencion(doc)
+		}
 	case esquema.GuiaRemision:
 		m, err = deGuia(doc)
 	case esquema.LiquidacionCompra:

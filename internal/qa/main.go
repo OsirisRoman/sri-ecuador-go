@@ -226,6 +226,7 @@ func main() {
 	loteSerie := flag.String("lote-serie", "001999", "serie (estab+ptoEmi) reservada para la clave del lote")
 	loteSec := flag.Int("lote-sec", 1, "secuencial del lote")
 	loteAlterar := flag.Bool("lote-alterar", false, "altera el segundo comprobante del lote después de firmarlo")
+	ret1Desde := flag.Int("ret1-desde", 0, "secuencial de comprobante de retención para probar la versión 1.0.0")
 	dir := flag.String("dir", "evidencia-privada", "directorio de evidencias (excluido de Git)")
 	flag.Parse()
 	if *desde < 1 {
@@ -259,7 +260,7 @@ func main() {
 		if *solo == "" && (e.nombre == "exportacion" || e.nombre == "reembolso") {
 			continue
 		}
-		if *solo == "" && (*ncDesde > 0 || *ndDesde > 0 || *retDesde > 0 || *guiaDesde > 0 || *liqDesde > 0 || *loteDesde > 0) {
+		if *solo == "" && (*ncDesde > 0 || *ndDesde > 0 || *retDesde > 0 || *guiaDesde > 0 || *liqDesde > 0 || *loteDesde > 0 || *ret1Desde > 0) {
 			continue // con -nc-desde o -nd-desde y sin -solo no se repiten las facturas
 		}
 		decir("\n== %s (secuencial %d, %s)\n   %s", e.nombre, sec, e.algoritmo, e.descripcion)
@@ -700,6 +701,48 @@ func main() {
 				if len(rl.Autorizaciones) >= len(docs) {
 					break
 				}
+			}
+		}
+	}
+	if *ret1Desde > 0 {
+		decir("\n== retencion-1.0.0 (comprobante de retención %d)", *ret1Desde)
+		it, err := entorno.Emisor(comprobante.CodComprobanteRetencion, *ret1Desde)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		hoy := comprobante.Hoy()
+		c := &retencion.ComprobanteV1{
+			InfoTributaria: it,
+			InfoCompRetencion: retencion.InfoV1{
+				FechaEmision:                     hoy,
+				ObligadoContabilidad:             entorno.Valor("SRI_EMISOR_OBLIGADO_CONTABILIDAD", "NO"),
+				TipoIdentificacionSujetoRetenido: comprobante.IDRuc,
+				RazonSocialSujetoRetenido:        razonPruebas,
+				IdentificacionSujetoRetenido:     rucSRI,
+			},
+			Impuestos: []retencion.ImpuestoV1{
+				{Codigo: retencion.ImpuestoRenta, CodigoRetencion: "312", BaseImponible: d("200.00"), PorcentajeRetener: d("2"),
+					CodDocSustento: "01", NumDocSustento: "001001000004321", FechaEmisionDocSustento: &hoy},
+				{Codigo: retencion.ImpuestoIVA, CodigoRetencion: "1", BaseImponible: d("30.00"), PorcentajeRetener: d("30"),
+					CodDocSustento: "01", NumDocSustento: "001001000004321", FechaEmisionDocSustento: &hoy},
+			},
+		}
+		c.Calcular()
+		c.GenerarClaveAcceso("")
+		cli, err := sri.Nuevo(sri.Config{Ambiente: comprobante.Pruebas, Certificado: cert, RUC: it.RUC})
+		if err != nil {
+			panic(err)
+		}
+		if prep, err := cli.Preparar(c); err != nil {
+			decir("   ERROR local: %v", err)
+			fallos++
+		} else {
+			base := filepath.Join(ronda, fmt.Sprintf("ret1-%d", *ret1Desde))
+			os.WriteFile(base+".firmado.xml", prep.XMLFirmado, 0o600)
+			decir("   local: reglas OK, XSD OK, firma verificada; v%s; total retenido %s", retencion.VersionV1, c.TotalRetenido())
+			if !enviar(cli, prep.XMLFirmado, base, decir) {
+				fallos++
 			}
 		}
 	}

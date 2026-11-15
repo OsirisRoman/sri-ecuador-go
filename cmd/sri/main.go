@@ -44,6 +44,7 @@ const uso = `Uso: sri <orden> [opciones]
   enviar   <firmado.xml>   Envía un comprobante firmado y espera su autorización
   autorizacion <clave>     Consulta la autorización de una clave de acceso
   estado <clave>           Consulta de validez (AUTORIZADO, ANULADO, …)
+  negociable <clave>       Consulta si una factura fue aceptada como comercial negociable
 
 Representación impresa:
   ride <comprobante.xml>   Genera el RIDE en PDF (-salida, -logo); use el .autorizado.xml
@@ -80,6 +81,8 @@ func main() {
 		err = cmdAutorizacion(args)
 	case "estado":
 		err = cmdEstado(args)
+	case "negociable":
+		err = cmdNegociable(os.Args[2:])
 	case "ride":
 		err = cmdRide(os.Args[2:])
 	case "correo":
@@ -375,6 +378,27 @@ func cmdEstado(args []string) error {
 
 // cmdCorreo compone, y con -enviar envía, el correo de entrega de un
 // comprobante autorizado.
+func cmdNegociable(args []string) error {
+	if len(args) != 1 {
+		return errors.New("indique la clave de acceso")
+	}
+	cli, err := nuevoCliente(nil, xades.SHA256)
+	if err != nil {
+		return err
+	}
+	ctx, cancelar := context.WithTimeout(context.Background(), time.Minute)
+	defer cancelar()
+	e, err := cli.Servicios().ConsultarNegociable(ctx, args[0])
+	if err != nil {
+		return err
+	}
+	fmt.Printf("estado de la consulta: %q\nconfirmada como negociable: %t (estadoConfirmacion %q)\n", e.EstadoConsulta, e.Confirmada(), e.EstadoConfirmacion)
+	for _, m := range e.Mensajes {
+		fmt.Printf("  %s %s\n", m.Tipo, m)
+	}
+	return nil
+}
+
 func cmdRide(args []string) error {
 	fs := flag.NewFlagSet("ride", flag.ExitOnError)
 	salida := fs.String("salida", "", "archivo PDF de salida (por defecto, el de entrada con extensión .pdf)")

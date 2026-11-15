@@ -64,6 +64,7 @@ func TestTodosLosTipos(t *testing.T) {
 		{"NotaCredito_V1.1.0.xml", "1.1.0", "NOTA DE CR\xc9DITO", "Nota de crédito"},
 		{"NotaDebito_V1.0.0.xml", "1.0.0", "NOTA DE D\xc9BITO", "Nota de débito"},
 		{"ComprobanteRetencion_V2.0.0.xml", "2.0.0", "COMPROBANTE DE RETENCI\xd3N", "Comprobante de retención"},
+		{"ComprobanteRetencion_V1.0.0.xml", "1.0.0", "COMPROBANTE DE RETENCI\xd3N", "Comprobante de retención"},
 		{"GuiaRemision_V1.1.0.xml", "1.1.0", "GU\xcdA DE REMISI\xd3N", "Guía de remisión"},
 		{"LiquidacionCompra_V1.1.0.xml", "1.1.0", "LIQUIDACI\xd3N DE COMPRA", "Liquidación de compra"},
 	}

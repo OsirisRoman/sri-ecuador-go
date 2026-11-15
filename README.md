@@ -18,7 +18,7 @@ No es un SDK teórico: cada pieza se comprobó enviando comprobantes reales al *
 | Factura de exportación y de reembolso de gastos | **AUTORIZADO** |
 | Nota de crédito (total y parcial) | **AUTORIZADO** |
 | Nota de débito | **AUTORIZADO** |
-| Comprobante de retención v2.0.0 | **AUTORIZADO** |
+| Comprobante de retención v2.0.0 y v1.0.0 | **AUTORIZADO** |
 | Guía de remisión v1.0.0 y 1.1.0 | **AUTORIZADO** |
 | Liquidación de compra v1.0.0 y 1.1.0 | **AUTORIZADO** |
 | Envío por lotes | Recibido; resultado por comprobante |
@@ -107,7 +107,7 @@ Si desarrolla con un asistente de IA, indíquele que lea [`AGENTS.md`](AGENTS.md
 | `factura` | Modelo tipado de la factura (v1.0.0, 1.1.0, 2.0.0, 2.1.0), totales y validación |
 | `notacredito` | Nota de crédito (v1.0.0, 1.1.0); `DesdeFactura` revierte una factura |
 | `notadebito` | Nota de débito (v1.0.0) |
-| `retencion` | Comprobante de retención (v2.0.0, ATS) |
+| `retencion` | Comprobante de retención (v2.0.0 ATS y v1.0.0) |
 | `guiaremision` | Guía de remisión (v1.0.0 y v1.1.0) |
 | `liquidacion` | Liquidación de compra (v1.0.0 y v1.1.0) |
 | `comprobante` | Tipos, catálogos y cálculo de impuestos comunes |
@@ -116,7 +116,7 @@ Si desarrolla con un asistente de IA, indíquele que lea [`AGENTS.md`](AGENTS.md
 | `esquema` | Validación contra los XSD oficiales incrustados |
 | `certificado` | Carga de certificados PKCS#12 (.p12) |
 | `xades` | Firma y verificación XAdES-BES |
-| `ws` | Clientes SOAP: recepción, autorización, consulta de validez |
+| `ws` | Clientes SOAP: recepción, autorización, lotes, consulta de validez y de factura negociable |
 | `sritest` | Simulador del SRI para pruebas sin conexión |
 | `ride` | Representación impresa (RIDE) en PDF de cualquier comprobante |
 | `correo` | Opcional: entrega del comprobante autorizado (XML y RIDE) por SMTP |
