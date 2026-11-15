@@ -97,7 +97,7 @@ if res.Autorizado() {
 }
 ```
 
-`ride.Generar` admite los seis tipos de comprobante, incluye el código de barras de la clave de acceso y no necesita bibliotecas externas. Si recibe una autorización cuyo estado no es `AUTORIZADO`, devuelve `ride.ErrNoAutorizado`. El documento con validez tributaria sigue siendo el XML.
+`ride.Generar` admite los seis tipos de comprobante, incluye el código de barras de la clave de acceso y no necesita bibliotecas externas. Sin logotipo, su espacio queda reservado con la leyenda «NO TIENE LOGO», igual que en los RIDE del SRI (`SinLeyendaLogo` lo deja en blanco). Si recibe una autorización cuyo estado no es `AUTORIZADO`, devuelve `ride.ErrNoAutorizado`. El documento con validez tributaria sigue siendo el XML.
 
 ## Pruebas sin conexión al SRI
 

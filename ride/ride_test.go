@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"os"
@@ -187,6 +188,41 @@ func TestLogoYErrores(t *testing.T) {
 	}
 	if !bytes.Contains(pdf, []byte("/Subtype /Image /Width 40 /Height 20")) {
 		t.Error("el logotipo no está en el PDF")
+	}
+	// Un JPEG se incrusta tal cual, sin recomprimir.
+	var jb bytes.Buffer
+	jpeg.Encode(&jb, img, nil)
+	pdf, err = ride.Generar(doc, &ride.Opciones{Logo: jb.Bytes()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(pdf, []byte("/Filter /DCTDecode")) || !bytes.Contains(pdf, jb.Bytes()) {
+		t.Error("el JPEG no se incrustó tal cual")
+	}
+	// Un JPEG enorme se reduce y sigue siendo JPEG.
+	jb.Reset()
+	jpeg.Encode(&jb, image.NewRGBA(image.Rect(0, 0, 2000, 2000)), nil)
+	pdf, err = ride.Generar(doc, &ride.Opciones{Logo: jb.Bytes()})
+	if err != nil || !bytes.Contains(pdf, []byte("/Width 900 /Height 900")) || !bytes.Contains(pdf, []byte("/Filter /DCTDecode")) {
+		t.Errorf("el JPEG grande no se redujo: %v", err)
+	}
+	// Un PNG enorme se reduce.
+	grande := image.NewRGBA(image.Rect(0, 0, 3000, 1500))
+	buf.Reset()
+	png.Encode(&buf, grande)
+	pdf, err = ride.Generar(doc, &ride.Opciones{Logo: buf.Bytes()})
+	if err != nil || !bytes.Contains(pdf, []byte("/Width 900 /Height 450")) {
+		t.Errorf("el PNG grande no se redujo: %v", err)
+	}
+	// Sin logotipo, el espacio queda reservado con la leyenda del SRI,
+	// salvo que se pida en blanco.
+	texto, _ := contenido(t, must(ride.Generar(doc, nil)))
+	if !strings.Contains(texto, "(NO TIENE LOGO)") {
+		t.Error("falta la leyenda NO TIENE LOGO")
+	}
+	texto, _ = contenido(t, must(ride.Generar(doc, &ride.Opciones{SinLeyendaLogo: true})))
+	if strings.Contains(texto, "NO TIENE LOGO") {
+		t.Error("no debe figurar la leyenda")
 	}
 	if _, err := ride.Generar(doc, &ride.Opciones{Logo: []byte("no es una imagen")}); !errors.Is(err, ride.ErrLogo) {
 		t.Errorf("esperaba ErrLogo, obtuve %v", err)

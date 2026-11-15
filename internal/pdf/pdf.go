@@ -43,7 +43,10 @@ type Documento struct {
 
 type imagen struct {
 	ancho, alto int
-	datos       []byte // RGB de 8 bits, comprimido con zlib
+	datos       []byte
+	// filtro y color describen datos: /FlateDecode con /DeviceRGB para los
+	// píxeles comprimidos con zlib, o /DCTDecode para un JPEG tal cual.
+	filtro, color string
 }
 
 // Nuevo crea un documento con una página en blanco.
@@ -200,14 +203,41 @@ func (d *Documento) Imagen(img image.Image, x, y, ancho, alto float64) {
 	for i := 0; i < len(rgba.Pix); i += 4 {
 		rgb = append(rgb, rgba.Pix[i], rgba.Pix[i+1], rgba.Pix[i+2])
 	}
-	d.imagenes = append(d.imagenes, imagen{b.Dx(), b.Dy(), comprimir(rgb)})
+	d.imagenes = append(d.imagenes, imagen{b.Dx(), b.Dy(), comprimir(rgb), "/FlateDecode", "/DeviceRGB"})
+	d.colocar(b.Dx(), b.Dy(), x, y, ancho, alto)
+}
 
-	escala := min(ancho/float64(b.Dx()), alto/float64(b.Dy()))
-	w, h := float64(b.Dx())*escala, float64(b.Dy())*escala
+// ImagenJPEG dibuja un JPEG incrustándolo tal cual, sin recomprimirlo.
+// gris indica que tiene un solo canal; si no, debe ser de tres (YCbCr o
+// RGB). anchoPx y altoPx son sus dimensiones en píxeles.
+func (d *Documento) ImagenJPEG(jpeg []byte, anchoPx, altoPx int, gris bool, x, y, ancho, alto float64) {
+	if anchoPx <= 0 || altoPx <= 0 || ancho <= 0 || alto <= 0 {
+		return
+	}
+	color := "/DeviceRGB"
+	if gris {
+		color = "/DeviceGray"
+	}
+	d.imagenes = append(d.imagenes, imagen{anchoPx, altoPx, jpeg, "/DCTDecode", color})
+	d.colocar(anchoPx, altoPx, x, y, ancho, alto)
+}
+
+// colocar pinta la última imagen registrada dentro del rectángulo,
+// conservando la proporción y centrada.
+func (d *Documento) colocar(anchoPx, altoPx int, x, y, ancho, alto float64) {
+	escala := min(ancho/float64(anchoPx), alto/float64(altoPx))
+	w, h := float64(anchoPx)*escala, float64(altoPx)*escala
 	x += (ancho - w) / 2
 	y += (alto - h) / 2
 	fmt.Fprintf(d.p(), "q %.2f 0 0 %.2f %.2f %.2f cm /Im%d Do Q\n", w, h, x, Alto-y-h, len(d.imagenes))
 }
+
+// Color fija el color de relleno (texto y rectángulos rellenos) con
+// componentes RGB entre 0 y 1; Negro lo restablece.
+func (d *Documento) Color(r, g, b float64) { fmt.Fprintf(d.p(), "%.3f %.3f %.3f rg\n", r, g, b) }
+
+// Negro restablece el color de relleno.
+func (d *Documento) Negro() { d.p().WriteString("0 g\n") }
 
 func comprimir(b []byte) []byte {
 	var buf bytes.Buffer
@@ -262,8 +292,8 @@ func (d *Documento) Bytes() []byte {
 	obj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>", nil)
 	var xobj strings.Builder
 	for i, im := range d.imagenes {
-		n := obj(fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length %d >>",
-			im.ancho, im.alto, len(im.datos)), im.datos)
+		n := obj(fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace %s /BitsPerComponent 8 /Filter %s /Length %d >>",
+			im.ancho, im.alto, im.color, im.filtro, len(im.datos)), im.datos)
 		fmt.Fprintf(&xobj, "/Im%d %d 0 R ", i+1, n)
 	}
 	recursos := fmt.Sprintf("<< /Font << /F1 3 0 R /F2 4 0 R >> /XObject << %s>> >>", xobj.String())
