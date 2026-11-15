@@ -21,6 +21,7 @@ import (
 	"time"
 
 	sri "github.com/OsirisRoman/sri-ecuador-go"
+	"github.com/OsirisRoman/sri-ecuador-go/clave"
 	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
 	"github.com/OsirisRoman/sri-ecuador-go/factura"
@@ -30,6 +31,7 @@ import (
 	"github.com/OsirisRoman/sri-ecuador-go/notacredito"
 	"github.com/OsirisRoman/sri-ecuador-go/notadebito"
 	"github.com/OsirisRoman/sri-ecuador-go/retencion"
+	"github.com/OsirisRoman/sri-ecuador-go/ws"
 	"github.com/OsirisRoman/sri-ecuador-go/xades"
 )
 
@@ -220,6 +222,10 @@ func main() {
 	ncDesde := flag.Int("nc-desde", 0, "primer secuencial de nota de crédito; activa los escenarios de nota de crédito")
 	guiaDesde := flag.Int("guia-desde", 0, "primer secuencial de guía de remisión; activa los escenarios de guía (usa 2)")
 	liqDesde := flag.Int("liq-desde", 0, "primer secuencial de liquidación de compra; activa los escenarios de liquidación (usa 2)")
+	loteDesde := flag.Int("lote-desde", 0, "primer secuencial de factura para un envío por lote de 2 facturas; el lote usa la serie -lote-serie")
+	loteSerie := flag.String("lote-serie", "001999", "serie (estab+ptoEmi) reservada para la clave del lote")
+	loteSec := flag.Int("lote-sec", 1, "secuencial del lote")
+	loteAlterar := flag.Bool("lote-alterar", false, "altera el segundo comprobante del lote después de firmarlo")
 	dir := flag.String("dir", "evidencia-privada", "directorio de evidencias (excluido de Git)")
 	flag.Parse()
 	if *desde < 1 {
@@ -253,7 +259,7 @@ func main() {
 		if *solo == "" && (e.nombre == "exportacion" || e.nombre == "reembolso") {
 			continue
 		}
-		if *solo == "" && (*ncDesde > 0 || *ndDesde > 0 || *retDesde > 0 || *guiaDesde > 0 || *liqDesde > 0) {
+		if *solo == "" && (*ncDesde > 0 || *ndDesde > 0 || *retDesde > 0 || *guiaDesde > 0 || *liqDesde > 0 || *loteDesde > 0) {
 			continue // con -nc-desde o -nd-desde y sin -solo no se repiten las facturas
 		}
 		decir("\n== %s (secuencial %d, %s)\n   %s", e.nombre, sec, e.algoritmo, e.descripcion)
@@ -629,8 +635,86 @@ func main() {
 			}
 		}
 	}
+	if *loteDesde > 0 {
+		decir("\n== lote (facturas %d y %d, lote %s-%d)", *loteDesde, *loteDesde+1, *loteSerie, *loteSec)
+		var docs [][]byte
+		var emisor comprobante.InfoTributaria
+		for i := 0; i < 2; i++ {
+			it, err := entorno.Emisor(comprobante.CodFactura, *loteDesde+i)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+			emisor = it
+			f := &factura.Factura{InfoTributaria: it}
+			f.InfoFactura.FechaEmision = comprobante.Hoy()
+			f.InfoFactura.ObligadoContabilidad = entorno.Valor("SRI_EMISOR_OBLIGADO_CONTABILIDAD", "NO")
+			consumidorFinal(f)
+			f.Calcular()
+			f.GenerarClaveAcceso("")
+			cli, _ := sri.Nuevo(sri.Config{Ambiente: comprobante.Pruebas, Certificado: cert, RUC: it.RUC})
+			prep, err := cli.Preparar(f)
+			if err != nil {
+				decir("   ERROR local: %v", err)
+				os.Exit(1)
+			}
+			os.WriteFile(filepath.Join(ronda, fmt.Sprintf("lote-factura-%d.firmado.xml", *loteDesde+i)), prep.XMLFirmado, 0o600)
+			docs = append(docs, prep.XMLFirmado)
+		}
+		if *loteAlterar {
+			docs[1] = []byte(strings.Replace(string(docs[1]), "PRODUCTO DE PRUEBA", "PRODUCTO ALTERADO", 1))
+			decir("   el segundo comprobante se alteró después de firmarlo")
+		}
+		claveLote, err := clave.Generar(clave.Componentes{
+			FechaEmision: comprobante.Hoy().Time(), TipoComprobante: comprobante.CodFactura, RUC: emisor.RUC, Ambiente: "1",
+			Establecimiento: (*loteSerie)[:3], PuntoEmision: (*loteSerie)[3:], Secuencial: fmt.Sprintf("%09d", *loteSec), CodigoNumerico: "12345678",
+		})
+		if err != nil {
+			panic(err)
+		}
+		servicios := ws.Nuevo(comprobante.Pruebas)
+		ctx, cancelar := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancelar()
+		rec, err := servicios.ValidarLote(ctx, ws.Lote{ClaveAcceso: claveLote, RUC: emisor.RUC, Comprobantes: docs})
+		if err != nil {
+			decir("   ERROR de comunicación: %v", err)
+		} else {
+			decir("   recepción del lote: %s", rec.Estado)
+			for _, m := range rec.Mensajes() {
+				decir("     %s %s", m.Tipo, sanear(m.String()))
+			}
+			for intento := 0; intento < 8 && rec.Recibida(); intento++ {
+				time.Sleep(4 * time.Second)
+				rl, err := servicios.AutorizacionLote(ctx, claveLote)
+				if err != nil {
+					decir("   ERROR al consultar el lote: %v", err)
+					break
+				}
+				decir("   consulta %d: comprobantes del lote = %q, autorizaciones = %d", intento+1, rl.NumeroComprobantesLote, len(rl.Autorizaciones))
+				for _, a := range rl.Autorizaciones {
+					decir("     estado %q (secuencial %s)", a.Estado, secuencialDe(a.Comprobante))
+					for _, m := range a.Mensajes {
+						decir("       %s %s", m.Tipo, sanear(m.String()))
+					}
+				}
+				if len(rl.Autorizaciones) >= len(docs) {
+					break
+				}
+			}
+		}
+	}
 	decir("\nsecuenciales de factura consumidos: %d (desde %d); de nota de crédito: %d; escenarios no autorizados: %d", sec-*desde, *desde, secNC-*ncDesde, fallos)
 	decir("evidencias: %s", ronda)
+}
+
+// secuencialDe extrae el secuencial de un comprobante, para distinguir los
+// resultados de un lote sin mostrar datos del emisor.
+func secuencialDe(doc string) string {
+	a, b := strings.Index(doc, "<secuencial>"), strings.Index(doc, "</secuencial>")
+	if a < 0 || b < a {
+		return "?"
+	}
+	return doc[a+12 : b]
 }
 
 func valor(v, porDefecto string) string {

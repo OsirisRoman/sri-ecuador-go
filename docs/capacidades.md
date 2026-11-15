@@ -16,7 +16,8 @@ Leyenda: ✅ implementado y probado · 🚧 parcial · ⏳ pendiente.
 | Verificación de firma | ✅ | Integridad, cobertura, certificado; cadena de confianza opcional. Sin OCSP/CRL |
 | SOAP recepción y autorización | ✅ | Probado con el SRI real (pruebas), con las respuestas de la ficha y con el simulador |
 | SOAP consulta de validez | ✅ | Probado con el SRI real para un comprobante autorizado |
-| SOAP lotes, factura comercial negociable | ⏳ | |
+| SOAP envío por lotes | ✅ | `ws.Lote`, `ValidarLote`, `AutorizacionLote`. Probado con el SRI real (pruebas): resultado por comprobante. El flujo de alto nivel `sri.Cliente` sigue siendo por comprobante |
+| SOAP factura comercial negociable | ⏳ | |
 | Reintentos e idempotencia | ✅ | |
 | Simulador del SRI (`sritest`) | ✅ | |
 | **Interoperabilidad con el SRI real** | 🚧 | Facturas 1.0.0, 1.1.0, 2.0.0 y 2.1.0 **autorizadas** en el ambiente de pruebas (SHA-256 y SHA-1, certificado BCE). Alcance y límites en `pruebas-sri.md` |

@@ -137,6 +137,23 @@ Conclusiones:
 
 No se probaron contra el SRI: combustibles, transporte comercial, factura comercial negociable ni reembolsos en liquidación de compra (sus reglas solo tienen pruebas locales).
 
+### Ronda 9 — 2026-11-15: envío por lotes
+
+El lote es un documento `<lote>` sin firmar que envuelve comprobantes firmados (Tabla 8). Se envía por la misma operación `validarComprobante` y se consulta con `autorizacionComprobanteLote`.
+
+| Lote | Recepción | Consulta del lote |
+|---|---|---|
+| Dos facturas válidas | `RECIBIDA` | 2 autorizaciones: **`AUTORIZADO`** y **`AUTORIZADO`** (resueltas en menos de 4 segundos) |
+| Una factura válida y otra alterada después de firmarla | `RECIBIDA` | **`AUTORIZADO`** la primera; **`NO AUTORIZADO`**, error 39 «FIRMA INVALIDA», la segunda |
+
+Lo que la ficha no aclaraba y estas pruebas establecen:
+
+- La clave de acceso del lote se aceptó con tipo de comprobante 01 y una serie reservada para lotes (se usó 001-999), distinta de la de los comprobantes.
+- El lote no necesita firma propia.
+- La recepción acepta el lote entero y el resultado es **por comprobante**: uno defectuoso no arrastra a los demás.
+
+No se probó: lotes con otros tipos de comprobante o mezclados, el máximo de 50 comprobantes, la reutilización de una clave de lote ni un lote con un comprobante que incumple el XSD (el simulador responde 35 por comprobante, pero es una suposición no contrastada).
+
 Qué **no** demuestran estas rondas:
 
 - Un solo certificado (Banco Central del Ecuador) y un solo emisor (persona natural). Certificados de otras entidades (Security Data, ANF, Uanataca…) pueden tener emisores con atributos distintos en `X509IssuerName`.
@@ -165,7 +182,7 @@ No se ha impreso en papel ni se ha leído el código con un lector físico.
 | Envío con texto, HTML y XML adjunto | Mailpit (contenedor local, sin cifrado) | Entregado; cabeceras, cuerpo y adjunto correctos |
 | Entrega de una nota de crédito autorizada | Servidor SMTP real del propietario, puerto 587 con STARTTLS y autenticación (2026-11-15) | Mensaje aceptado por el servidor y **recibido en la bandeja de entrada** (Gmail), con el cuerpo y el XML adjunto correctos |
 
-| Entrega de una factura autorizada con XML y RIDE adjuntos | El mismo servidor SMTP real (2026-11-15) | Mensaje aceptado por el servidor; pendiente de que el propietario confirme la recepción y que el PDF se abre bien |
+| Entrega de una factura autorizada con XML y RIDE adjuntos | El mismo servidor SMTP real (2026-11-15) | Mensaje aceptado por el servidor y **recibido** (confirmado por el propietario), primero sin logotipo y después con el logotipo en el RIDE |
 
 Que un servidor acepte el mensaje no garantiza la llegada a la bandeja de entrada: eso depende de la reputación del remitente (SPF, DKIM, DMARC), ajena al SDK.
 
