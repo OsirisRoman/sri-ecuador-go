@@ -17,6 +17,8 @@
 /research/
 *.pdf
 *:Zone.Identifier
+Catalogo_ATS.xls
+catalogo.tsv
 
 # --- Evidencias sin sanitizar de pruebas reales contra el SRI --------------
 /evidencia-privada/

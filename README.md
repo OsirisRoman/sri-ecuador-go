@@ -106,6 +106,10 @@ go run ./cmd/sri firmar factura.xml
 go run ./cmd/sri verificar factura.firmado.xml
 ```
 
+## Mantenimiento: datos que caducan
+
+El SDK incluye copias de catálogos del SRI (porcentajes de retención, tarifas de IVA, formas de pago, esquemas XSD) que cambian con la normativa. **Deben revisarse periódicamente**; el procedimiento está en [docs/actualizar-catalogos.md](docs/actualizar-catalogos.md). El catálogo de retenciones de renta declara su vigencia en `retencion.CatalogoRentaVigencia`.
+
 ## Seguridad
 
 - La contraseña del certificado se lee de variables de entorno o de un archivo; nunca de argumentos de línea de comandos.
@@ -119,6 +123,7 @@ go run ./cmd/sri verificar factura.firmado.xml
 - [Capacidades y limitaciones](docs/capacidades.md)
 - [Decisiones técnicas](docs/decisiones.md)
 - [Pruebas contra el SRI](docs/pruebas-sri.md)
+- [Datos que caducan y cómo actualizarlos](docs/actualizar-catalogos.md)
 - [Fuentes y licencias](docs/fuentes.md)
 
 ## Licencia
