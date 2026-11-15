@@ -22,8 +22,9 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	_ "image/jpeg" // logotipos JPEG
-	_ "image/png"  // logotipos PNG
+	"image/color"
+	"image/jpeg"
+	_ "image/png" // logotipos PNG
 	"strings"
 	"time"
 
@@ -34,9 +35,14 @@ import (
 
 // Opciones ajusta Generar. El valor cero es válido.
 type Opciones struct {
-	// Logo es el logotipo del emisor en PNG o JPEG; si falta, su espacio
-	// queda libre.
+	// Logo es el logotipo del emisor en PNG o JPEG. Los JPEG se incrustan
+	// tal cual; los PNG grandes se reducen. Si falta, su espacio queda
+	// reservado con la leyenda «NO TIENE LOGO», como en los RIDE que genera
+	// el SRI.
 	Logo []byte
+	// SinLeyendaLogo deja en blanco el espacio del logotipo cuando no hay
+	// Logo, en vez de escribir «NO TIENE LOGO».
+	SinLeyendaLogo bool
 	// NumeroAutorizacion y FechaAutorizacion se usan cuando el documento no
 	// trae la envoltura <autorizacion>. En el esquema offline el número de
 	// autorización es la clave de acceso, que es el valor por defecto.
@@ -100,13 +106,86 @@ func Generar(doc []byte, op *Opciones) ([]byte, error) {
 	if m.fechaAutorizado == "" {
 		m.fechaAutorizado = fechaLegible(op.FechaAutorizacion)
 	}
-	var logo image.Image
-	if len(op.Logo) > 0 {
-		if logo, _, err = image.Decode(bytes.NewReader(op.Logo)); err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrLogo, err)
-		}
+	logo, err := leerLogo(op.Logo)
+	if err != nil {
+		return nil, err
+	}
+	if logo == nil && !op.SinLeyendaLogo {
+		logo = &logotipo{}
 	}
 	return m.dibujar(logo, !op.SinCodigoBarras), nil
+}
+
+// logotipo es la imagen que ocupa el espacio del logo: un JPEG que se
+// incrusta sin recomprimir, una imagen decodificada o, si ambos faltan, la
+// leyenda «NO TIENE LOGO».
+type logotipo struct {
+	jpeg        []byte
+	ancho, alto int
+	gris        bool
+	img         image.Image
+}
+
+// maxLadoLogo es el mayor lado, en píxeles, con el que se incrusta un
+// logotipo que hay que recomprimir: de sobra para los 8 cm que ocupa.
+const maxLadoLogo = 900
+
+func leerLogo(datos []byte) (*logotipo, error) {
+	if len(datos) == 0 {
+		return nil, nil
+	}
+	cfg, formato, err := image.DecodeConfig(bytes.NewReader(datos))
+	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
+		return nil, fmt.Errorf("%w: %v", ErrLogo, err)
+	}
+	esJPEG := formato == "jpeg" && (cfg.ColorModel == color.YCbCrModel || cfg.ColorModel == color.GrayModel)
+	if esJPEG && cfg.Width <= maxLadoLogo && cfg.Height <= maxLadoLogo {
+		// Un JPEG de tamaño razonable se incrusta tal cual.
+		return &logotipo{jpeg: datos, ancho: cfg.Width, alto: cfg.Height, gris: cfg.ColorModel == color.GrayModel}, nil
+	}
+	img, _, err := image.Decode(bytes.NewReader(datos))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrLogo, err)
+	}
+	img = reducir(img, maxLadoLogo)
+	if esJPEG {
+		// Un JPEG demasiado grande se reduce y se vuelve a comprimir como
+		// JPEG, para que el RIDE no pese cientos de kilobytes.
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 88}); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrLogo, err)
+		}
+		b := img.Bounds()
+		return &logotipo{jpeg: buf.Bytes(), ancho: b.Dx(), alto: b.Dy()}, nil
+	}
+	return &logotipo{img: img}, nil
+}
+
+// reducir devuelve img con su lado mayor limitado a lado píxeles,
+// promediando los píxeles de origen que caen en cada píxel de destino.
+func reducir(img image.Image, lado int) image.Image {
+	b := img.Bounds()
+	mayor := max(b.Dx(), b.Dy())
+	if mayor <= lado {
+		return img
+	}
+	w, h := max(b.Dx()*lado/mayor, 1), max(b.Dy()*lado/mayor, 1)
+	out := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		y0, y1 := b.Min.Y+y*b.Dy()/h, b.Min.Y+(y+1)*b.Dy()/h
+		for x := 0; x < w; x++ {
+			x0, x1 := b.Min.X+x*b.Dx()/w, b.Min.X+(x+1)*b.Dx()/w
+			var r, g, bl, a, n uint64
+			for sy := y0; sy < max(y1, y0+1); sy++ {
+				for sx := x0; sx < max(x1, x0+1); sx++ {
+					cr, cg, cb, ca := img.At(sx, sy).RGBA()
+					r, g, bl, a, n = r+uint64(cr), g+uint64(cg), bl+uint64(cb), a+uint64(ca), n+1
+				}
+			}
+			out.SetRGBA64(x, y, color.RGBA64{uint16(r / n), uint16(g / n), uint16(bl / n), uint16(a / n)})
+		}
+	}
+	return out
 }
 
 // Resumen son los datos con los que se suele presentar un comprobante, por
@@ -200,7 +279,7 @@ func raiz(doc []byte) string {
 	}
 }
 
-func (m *modelo) dibujar(logo image.Image, barras bool) []byte {
+func (m *modelo) dibujar(logo *logotipo, barras bool) []byte {
 	d := pdf.Nuevo()
 	d.Titulo = fmt.Sprintf("%s %s", m.titulo, m.it.NumeroComprobante())
 	d.Autor = m.it.RazonSocial
@@ -215,7 +294,7 @@ func (m *modelo) dibujar(logo image.Image, barras bool) []byte {
 
 // cabecera dibuja el logotipo y los datos del emisor a la izquierda y la
 // identificación del comprobante a la derecha.
-func (m *modelo) cabecera(l *lienzo, logo image.Image, barras bool) {
+func (m *modelo) cabecera(l *lienzo, logo *logotipo, barras bool) {
 	const (
 		hueco    = 10.0
 		altoLogo = 78.0
@@ -287,13 +366,24 @@ func (m *modelo) cabecera(l *lienzo, logo image.Image, barras bool) {
 	}
 	hDer := identificacion(false, 0)
 
-	// Con logotipo, este ocupa la parte alta de la columna izquierda y el
-	// emisor queda debajo; sin él, el recuadro del emisor llena la columna.
+	// El logotipo (o la leyenda que reserva su espacio) ocupa la parte alta
+	// de la columna izquierda y el emisor queda debajo; si se pidió dejarlo
+	// en blanco sin leyenda, el recuadro del emisor llena la columna.
 	alto := max(hDer, hEmisor)
 	yEmisor, hCaja := l.y, alto
 	if logo != nil {
 		alto = max(hDer, altoLogo+hueco+hEmisor)
-		l.d.Imagen(logo, margen, l.y, wIzq, alto-hEmisor-hueco)
+		hLogo := alto - hEmisor - hueco
+		switch {
+		case logo.jpeg != nil:
+			l.d.ImagenJPEG(logo.jpeg, logo.ancho, logo.alto, logo.gris, margen, l.y, wIzq, hLogo)
+		case logo.img != nil:
+			l.d.Imagen(logo.img, margen, l.y, wIzq, hLogo)
+		default:
+			l.d.Color(0.85, 0, 0)
+			l.d.TextoCentrado(margen+wIzq/2, l.y+hLogo/2+8, "NO TIENE LOGO", pdf.Negrita, 22)
+			l.d.Negro()
+		}
 		yEmisor, hCaja = l.y+alto-hEmisor, hEmisor
 	}
 	l.d.Rect(margen, yEmisor, wIzq, hCaja, grosor)
