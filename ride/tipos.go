@@ -63,9 +63,9 @@ func totalesImpuestos(tis []comprobante.TotalImpuesto, sinImpuestos decimal.Deci
 }
 
 var columnasVenta = []columna{
-	{"Cod. Principal", 9, izquierda}, {"Cod. Auxiliar", 8, izquierda}, {"Cantidad", 8, derecha},
-	{"Descripción", 27, izquierda}, {"Detalle Adicional", 16, izquierda},
-	{"Precio Unitario", 10, derecha}, {"Descuento", 9, derecha}, {"Precio Total", 10, derecha},
+	{"Cod. Principal", 10, izquierda}, {"Cod. Auxiliar", 9, izquierda}, {"Cantidad", 9, derecha},
+	{"Descripción", 24, izquierda}, {"Detalle Adicional", 15, izquierda},
+	{"Precio Unitario", 11, derecha}, {"Descuento", 10, derecha}, {"Precio Total", 12, derecha},
 }
 
 func filasVenta(ds []factura.Detalle) [][]string {
@@ -277,9 +277,9 @@ func deRetencion(doc []byte) (*modelo, error) {
 		}
 	}
 	cols := []columna{
-		{"Comprobante", 13, izquierda}, {"Número", 14, izquierda}, {"Fecha Emisión", 10, centro}, {"Ejercicio Fiscal", 9, centro},
-		{"Base Imponible para la Retención", 13, derecha}, {"Impuesto", 9, centro}, {"Código", 8, centro},
-		{"Porcentaje Retención", 11, derecha}, {"Valor Retenido", 13, derecha},
+		{"Comprobante", 12, izquierda}, {"Número", 18, izquierda}, {"Fecha Emisión", 11, centro}, {"Ejercicio Fiscal", 9, centro},
+		{"Base Imponible para la Retención", 12, derecha}, {"Impuesto", 9, centro}, {"Código", 8, centro},
+		{"Porcentaje Retención", 10, derecha}, {"Valor Retenido", 11, derecha},
 	}
 	return &modelo{
 		titulo: "COMPROBANTE DE RETENCIÓN", it: c.InfoTributaria,

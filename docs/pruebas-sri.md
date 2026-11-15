@@ -168,7 +168,7 @@ Los RIDE no se envían al SRI; lo que sigue son comprobaciones locales sobre los
 
 | Qué | Con qué | Resultado |
 |---|---|---|
-| RIDE de factura, nota de crédito, nota de débito, retención, guía de remisión y liquidación de compra | `ride.Generar` sobre los XML autorizados | Seis PDF de una página, de 3 a 4 KB |
+| RIDE de factura, nota de crédito, nota de débito, retención, guía de remisión y liquidación de compra | `ride.Generar` sobre los XML autorizados | Seis PDF de una página |
 | El PDF es válido y se ve como se espera | Dos visores independientes: poppler (`pdfinfo`, `pdftoppm`) y MuPDF (`mutool`), más revisión visual | Sin errores; contenido, tablas y totales correctos |
 | El código de barras es legible | Lector zbar (`zbarimg`) sobre el PDF rasterizado a 300 ppp | Code 128 leído en los seis; coincide con la clave de acceso impresa |
 | Correo con RIDE adjunto | Mensaje compuesto sin enviar | Dos adjuntos: XML y PDF |

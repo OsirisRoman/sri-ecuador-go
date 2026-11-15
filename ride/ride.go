@@ -296,9 +296,9 @@ func (m *modelo) dibujar(logo *logotipo, barras bool) []byte {
 // identificación del comprobante a la derecha.
 func (m *modelo) cabecera(l *lienzo, logo *logotipo, barras bool) {
 	const (
-		hueco    = 10.0
-		altoLogo = 78.0
-		pad      = 8.0
+		hueco    = 12.0
+		altoLogo = 120.0
+		pad      = 12.0
 	)
 	wIzq := anchoUtil*0.48 - hueco/2
 	wDer := anchoUtil - wIzq - hueco
@@ -326,8 +326,8 @@ func (m *modelo) cabecera(l *lienzo, logo *logotipo, barras bool) {
 		datos = append(datos, []par{{"", m.it.ContribuyenteRimpe}})
 	}
 	emisor := func(dibujar bool, y float64) float64 {
-		h := l.parrafo(dibujar, margen+pad, y+pad, wIzq-2*pad, m.it.RazonSocial, pdf.Negrita, 9, izquierda) + 4
-		h += l.filasPares(dibujar, margen+pad, y+pad+h, wIzq-2*pad, datos, 7.5)
+		h := l.parrafo(dibujar, margen+pad, y+pad, wIzq-2*pad, m.it.RazonSocial, pdf.Negrita, 11, izquierda) + 6
+		h += l.filasPares(dibujar, margen+pad, y+pad+h, wIzq-2*pad, datos, 9)
 		return h + 2*pad
 	}
 	hEmisor := emisor(false, 0)
@@ -340,28 +340,28 @@ func (m *modelo) cabecera(l *lienzo, logo *logotipo, barras bool) {
 	identificacion := func(dibujar bool, y float64) float64 {
 		x, w, y0 := xDer+pad, wDer-2*pad, y
 		y += pad
-		y += l.parRotulado(dibujar, x, y, w, par{"R.U.C.", m.it.RUC}, 11) + 4
-		y += l.parrafo(dibujar, x, y, w, m.titulo, pdf.Negrita, 11, izquierda) + 4
-		y += l.parRotulado(dibujar, x, y, w, par{"No.", m.it.NumeroComprobante()}, 9) + 4
-		y += l.parrafo(dibujar, x, y, w, "NÚMERO DE AUTORIZACIÓN", pdf.Normal, 9, izquierda)
-		y += l.parrafo(dibujar, x, y, w, m.numAutorizacion, pdf.Normal, 8, izquierda) + 4
+		y += l.parRotulado(dibujar, x, y, w, par{"R.U.C.", m.it.RUC}, 13) + 7
+		y += l.parrafo(dibujar, x, y, w, m.titulo, pdf.Negrita, 14, izquierda) + 7
+		y += l.parRotulado(dibujar, x, y, w, par{"No.", m.it.NumeroComprobante()}, 11) + 9
+		y += l.parrafo(dibujar, x, y, w, "NÚMERO DE AUTORIZACIÓN", pdf.Normal, 10, izquierda) + 1
+		y += l.parrafo(dibujar, x, y, w, m.numAutorizacion, pdf.Normal, 8.5, izquierda) + 8
 		if m.fechaAutorizado != "" {
-			y += l.parRotulado(dibujar, x, y, w, par{"FECHA Y HORA DE AUTORIZACIÓN", m.fechaAutorizado}, 7.5) + 4
+			y += l.parRotulado(dibujar, x, y, w, par{"FECHA Y HORA DE AUTORIZACIÓN", m.fechaAutorizado}, 8.5) + 8
 		}
-		y += l.parRotulado(dibujar, x, y, w, par{"AMBIENTE", ambiente}, 8) + 2
-		y += l.parRotulado(dibujar, x, y, w, par{"EMISIÓN", "NORMAL"}, 8) + 4
-		y += l.parrafo(dibujar, x, y, w, "CLAVE DE ACCESO", pdf.Normal, 9, izquierda) + 2
+		y += l.parRotulado(dibujar, x, y, w, par{"AMBIENTE", ambiente}, 9.5) + 5
+		y += l.parRotulado(dibujar, x, y, w, par{"EMISIÓN", "NORMAL"}, 9.5) + 9
+		y += l.parrafo(dibujar, x, y, w, "CLAVE DE ACCESO", pdf.Normal, 10, izquierda) + 4
 		if barras && m.it.ClaveAcceso != "" {
 			if dibujar {
 				// Se dejan 10 módulos de silencio a cada lado.
-				l.d.Code128(m.it.ClaveAcceso, x+8, y, w-16, 30)
+				l.d.Code128(m.it.ClaveAcceso, x+8, y, w-16, 42)
 			}
-			y += 30 + 2
+			y += 42 + 3
 		}
 		if dibujar {
-			l.d.TextoCentrado(x+w/2, y+7, m.it.ClaveAcceso, pdf.Normal, 7)
+			l.d.TextoCentrado(x+w/2, y+8, m.it.ClaveAcceso, pdf.Normal, 8)
 		}
-		y += interlinea(7)
+		y += interlinea(8)
 		return y - y0 + pad
 	}
 	hDer := identificacion(false, 0)
@@ -381,7 +381,7 @@ func (m *modelo) cabecera(l *lienzo, logo *logotipo, barras bool) {
 			l.d.Imagen(logo.img, margen, l.y, wIzq, hLogo)
 		default:
 			l.d.Color(0.85, 0, 0)
-			l.d.TextoCentrado(margen+wIzq/2, l.y+hLogo/2+8, "NO TIENE LOGO", pdf.Negrita, 22)
+			l.d.TextoCentrado(margen+wIzq/2, l.y+hLogo/2+8, "NO TIENE LOGO", pdf.Negrita, 26)
 			l.d.Negro()
 		}
 		yEmisor, hCaja = l.y+alto-hEmisor, hEmisor
@@ -399,7 +399,7 @@ func (m *modelo) cierre(l *lienzo) {
 	if len(m.adicional) == 0 && len(m.pagos) == 0 && len(m.totales) == 0 {
 		return
 	}
-	const hueco, tam = 10.0, 7.5
+	const hueco, tam = 12.0, tamTexto - 0.5
 	wIzq := anchoUtil*0.56 - hueco/2
 	wDer := anchoUtil - wIzq - hueco
 	xDer := margen + wIzq + hueco
@@ -412,34 +412,34 @@ func (m *modelo) cierre(l *lienzo) {
 		if len(filas) == 0 {
 			return 0
 		}
-		h := l.parrafo(dibujar, margen+relleno, y+relleno, wIzq-2*relleno, "Información Adicional", pdf.Negrita, 8, izquierda) + 2
+		h := l.parrafo(dibujar, margen+relleno, y+relleno, wIzq-2*relleno, "Información Adicional", pdf.Negrita, tamTexto, izquierda) + 4
 		h += l.filasPares(dibujar, margen+relleno, y+relleno+h, wIzq-2*relleno, filas, tam)
 		return h + 2*relleno
 	}
 	hAdic := adicional(false, 0)
 	hPagos := 0.0
 	if len(m.pagos) > 0 {
-		hPagos = float64(len(m.pagos)+1)*(interlinea(7)+2*relleno) + 30 // holgura para textos partidos
+		hPagos = float64(len(m.pagos)+1)*(interlinea(tamTabla)+2*relleno) + 36 // holgura para textos partidos
 		if hAdic > 0 {
 			hPagos += separa
 		}
 	}
-	hTot := float64(len(m.totales)) * (interlinea(tam) + 4)
+	hTot := float64(len(m.totales)) * (interlinea(tam) + 7)
 	l.asegurar(max(hAdic+hPagos, hTot))
 	y0 := l.y
 
 	// Totales (derecha).
 	y := y0
 	for _, t := range m.totales {
-		h := interlinea(tam) + 4
+		h := interlinea(tam) + 7
 		l.d.Rect(xDer, y, wDer*0.62, h, grosor)
 		l.d.Rect(xDer+wDer*0.62, y, wDer*0.38, h, grosor)
 		f := pdf.Normal
 		if t.rotulo == rotuloTotal {
 			f = pdf.Negrita
 		}
-		l.d.Texto(xDer+relleno, y+tam+2, t.rotulo, f, tam)
-		l.d.TextoDerecha(xDer+wDer-relleno, y+tam+2, t.valor, f, tam)
+		l.d.Texto(xDer+relleno, y+tam+5, t.rotulo, f, tam)
+		l.d.TextoDerecha(xDer+wDer-relleno, y+tam+5, t.valor, f, tam)
 		y += h
 	}
 	finDer := y
