@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/jpeg"
 	"image/png"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -176,9 +178,7 @@ func TestAutorizacion(t *testing.T) {
 
 func TestLogoYErrores(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 40, 20))
-	for x := 0; x < 40; x++ {
-		img.Set(x, 10, color.RGBA{0, 80, 160, 255})
-	}
+	draw.Draw(img, img.Bounds(), image.NewUniform(color.RGBA{0, 80, 160, 255}), image.Point{}, draw.Src)
 	var buf bytes.Buffer
 	png.Encode(&buf, img)
 	doc := facturaDePrueba(t, 1)
@@ -189,7 +189,7 @@ func TestLogoYErrores(t *testing.T) {
 	if !bytes.Contains(pdf, []byte("/Subtype /Image /Width 40 /Height 20")) {
 		t.Error("el logotipo no está en el PDF")
 	}
-	// Un JPEG se incrusta tal cual, sin recomprimir.
+	// Un JPEG sin márgenes se incrusta tal cual, sin recomprimir.
 	var jb bytes.Buffer
 	jpeg.Encode(&jb, img, nil)
 	pdf, err = ride.Generar(doc, &ride.Opciones{Logo: jb.Bytes()})
@@ -199,15 +199,32 @@ func TestLogoYErrores(t *testing.T) {
 	if !bytes.Contains(pdf, []byte("/Filter /DCTDecode")) || !bytes.Contains(pdf, jb.Bytes()) {
 		t.Error("el JPEG no se incrustó tal cual")
 	}
+	// Los márgenes en blanco se recortan para que el dibujo llene el
+	// espacio: un cuadro de 100×40 centrado en un lienzo blanco de 1000×1000.
+	lienzo := image.NewRGBA(image.Rect(0, 0, 1000, 1000))
+	draw.Draw(lienzo, lienzo.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+	draw.Draw(lienzo, image.Rect(450, 480, 550, 520), image.NewUniform(color.RGBA{0, 80, 160, 255}), image.Point{}, draw.Src)
+	buf.Reset()
+	png.Encode(&buf, lienzo)
+	pdf, err = ride.Generar(doc, &ride.Opciones{Logo: buf.Bytes()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := regexp.MustCompile(`/Width (\d+) /Height (\d+)`).FindSubmatch(pdf); m == nil || len(m[1]) > 3 || len(m[2]) > 2 {
+		t.Errorf("el lienzo en blanco no se recortó: %s", m)
+	}
 	// Un JPEG enorme se reduce y sigue siendo JPEG.
 	jb.Reset()
-	jpeg.Encode(&jb, image.NewRGBA(image.Rect(0, 0, 2000, 2000)), nil)
+	enorme := image.NewRGBA(image.Rect(0, 0, 2000, 2000))
+	draw.Draw(enorme, enorme.Bounds(), image.NewUniform(color.RGBA{0, 80, 160, 255}), image.Point{}, draw.Src)
+	jpeg.Encode(&jb, enorme, nil)
 	pdf, err = ride.Generar(doc, &ride.Opciones{Logo: jb.Bytes()})
 	if err != nil || !bytes.Contains(pdf, []byte("/Width 900 /Height 900")) || !bytes.Contains(pdf, []byte("/Filter /DCTDecode")) {
 		t.Errorf("el JPEG grande no se redujo: %v", err)
 	}
 	// Un PNG enorme se reduce.
 	grande := image.NewRGBA(image.Rect(0, 0, 3000, 1500))
+	draw.Draw(grande, grande.Bounds(), image.NewUniform(color.RGBA{0, 80, 160, 255}), image.Point{}, draw.Src)
 	buf.Reset()
 	png.Encode(&buf, grande)
 	pdf, err = ride.Generar(doc, &ride.Opciones{Logo: buf.Bytes()})

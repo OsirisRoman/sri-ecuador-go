@@ -138,27 +138,66 @@ func leerLogo(datos []byte) (*logotipo, error) {
 	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
 		return nil, fmt.Errorf("%w: %v", ErrLogo, err)
 	}
-	esJPEG := formato == "jpeg" && (cfg.ColorModel == color.YCbCrModel || cfg.ColorModel == color.GrayModel)
-	if esJPEG && cfg.Width <= maxLadoLogo && cfg.Height <= maxLadoLogo {
-		// Un JPEG de tamaño razonable se incrusta tal cual.
-		return &logotipo{jpeg: datos, ancho: cfg.Width, alto: cfg.Height, gris: cfg.ColorModel == color.GrayModel}, nil
-	}
 	img, _, err := image.Decode(bytes.NewReader(datos))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrLogo, err)
 	}
-	img = reducir(img, maxLadoLogo)
+	esJPEG := formato == "jpeg" && (cfg.ColorModel == color.YCbCrModel || cfg.ColorModel == color.GrayModel)
+	recortada := recortar(img)
+	if esJPEG && recortada.Bounds() == img.Bounds() && cfg.Width <= maxLadoLogo && cfg.Height <= maxLadoLogo {
+		// Un JPEG sin márgenes y de tamaño razonable se incrusta tal cual.
+		return &logotipo{jpeg: datos, ancho: cfg.Width, alto: cfg.Height, gris: cfg.ColorModel == color.GrayModel}, nil
+	}
+	img = reducir(recortada, maxLadoLogo)
 	if esJPEG {
-		// Un JPEG demasiado grande se reduce y se vuelve a comprimir como
-		// JPEG, para que el RIDE no pese cientos de kilobytes.
+		// Los JPEG se vuelven a comprimir como JPEG para que el RIDE no
+		// pese cientos de kilobytes.
 		var buf bytes.Buffer
-		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 88}); err != nil {
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90}); err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrLogo, err)
 		}
 		b := img.Bounds()
 		return &logotipo{jpeg: buf.Bytes(), ancho: b.Dx(), alto: b.Dy()}, nil
 	}
 	return &logotipo{img: img}, nil
+}
+
+// recortar quita los márgenes en blanco o transparentes que rodean al
+// logotipo, para que el dibujo —y no su lienzo vacío— llene el espacio
+// reservado. Deja un margen del 2 % y devuelve img sin cambios si no hay
+// nada que recortar o si la imagen está vacía.
+func recortar(img image.Image) image.Image {
+	b := img.Bounds()
+	const umbral = 0xF000 // por encima se considera blanco
+	vacio := func(x, y int) bool {
+		r, g, bl, a := img.At(x, y).RGBA()
+		return a < 0x1000 || (r >= umbral && g >= umbral && bl >= umbral)
+	}
+	// Se muestrea con un paso para no recorrer millones de píxeles.
+	paso := max(max(b.Dx(), b.Dy())/600, 1)
+	x0, y0, x1, y1 := b.Max.X, b.Max.Y, b.Min.X, b.Min.Y
+	for y := b.Min.Y; y < b.Max.Y; y += paso {
+		for x := b.Min.X; x < b.Max.X; x += paso {
+			if !vacio(x, y) {
+				x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
+			}
+		}
+	}
+	if x1 < x0 || y1 < y0 {
+		return img
+	}
+	m := max(b.Dx(), b.Dy())/50 + paso
+	caja := image.Rect(x0-m, y0-m, x1+m+1, y1+m+1).Intersect(b)
+	if caja == b {
+		return img
+	}
+	type subimagen interface {
+		SubImage(image.Rectangle) image.Image
+	}
+	if si, ok := img.(subimagen); ok {
+		return si.SubImage(caja)
+	}
+	return img
 }
 
 // reducir devuelve img con su lado mayor limitado a lado píxeles,

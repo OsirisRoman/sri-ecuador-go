@@ -13,7 +13,7 @@ const (
 	pie       = pdf.Alto - margen
 	relleno   = 6.0 // espacio interior de cajas y celdas
 	grosor    = 0.5
-	radio     = 5.0  // radio de las esquinas de cajas y tablas
+	radio     = 9.0  // radio de las esquinas de cajas y tablas
 	separa    = 14.0 // separación vertical entre bloques
 )
 
