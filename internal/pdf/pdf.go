@@ -184,6 +184,35 @@ func (d *Documento) Rect(x, y, ancho, alto, grosor float64) {
 	fmt.Fprintf(d.p(), "%.2f w %.2f %.2f %.2f %.2f re S\n", grosor, x, Alto-y-alto, ancho, alto)
 }
 
+// redondeado escribe el camino de un rectángulo con las esquinas superiores
+// de radio rSup y las inferiores de radio rInf.
+func (d *Documento) redondeado(x, y, ancho, alto, rSup, rInf float64) {
+	const k = 0.5523 // aproximación de un cuarto de círculo con una curva de Bézier
+	lim := min(ancho, alto) / 2
+	rs, ri := min(rSup, lim), min(rInf, lim)
+	x2, yt, yb := x+ancho, Alto-y, Alto-y-alto
+	fmt.Fprintf(d.p(), "%.2f %.2f m %.2f %.2f l %.2f %.2f %.2f %.2f %.2f %.2f c ", x+rs, yt, x2-rs, yt, x2-rs+k*rs, yt, x2, yt-rs+k*rs, x2, yt-rs)
+	fmt.Fprintf(d.p(), "%.2f %.2f l %.2f %.2f %.2f %.2f %.2f %.2f c ", x2, yb+ri, x2, yb+ri-k*ri, x2-ri+k*ri, yb, x2-ri, yb)
+	fmt.Fprintf(d.p(), "%.2f %.2f l %.2f %.2f %.2f %.2f %.2f %.2f c ", x+ri, yb, x+ri-k*ri, yb, x, yb+ri-k*ri, x, yb+ri)
+	fmt.Fprintf(d.p(), "%.2f %.2f l %.2f %.2f %.2f %.2f %.2f %.2f c h ", x, yt-rs, x, yt-rs+k*rs, x+rs-k*rs, yt, x+rs, yt)
+}
+
+// RectRedondeado traza el contorno de un rectángulo con las esquinas
+// redondeadas.
+func (d *Documento) RectRedondeado(x, y, ancho, alto, radio, grosor float64) {
+	fmt.Fprintf(d.p(), "%.2f w ", grosor)
+	d.redondeado(x, y, ancho, alto, radio, radio)
+	d.p().WriteString("S\n")
+}
+
+// RellenoRedondeado pinta de gris (0 negro, 1 blanco) un rectángulo cuyas
+// esquinas superiores e inferiores pueden tener radios distintos.
+func (d *Documento) RellenoRedondeado(x, y, ancho, alto, rSup, rInf, gris float64) {
+	fmt.Fprintf(d.p(), "%.3f g ", gris)
+	d.redondeado(x, y, ancho, alto, rSup, rInf)
+	d.p().WriteString("f 0 g\n")
+}
+
 // RectRelleno pinta un rectángulo con un gris entre 0 (negro) y 1 (blanco).
 func (d *Documento) RectRelleno(x, y, ancho, alto, gris float64) {
 	fmt.Fprintf(d.p(), "%.3f g %.2f %.2f %.2f %.2f re f 0 g\n", gris, x, Alto-y-alto, ancho, alto)

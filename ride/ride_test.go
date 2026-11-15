@@ -234,3 +234,23 @@ func TestLogoYErrores(t *testing.T) {
 		t.Error("esperaba error con un documento ilegible")
 	}
 }
+
+// Al repartir el espacio de un comprobante corto no debe desbordarse a una
+// segunda página, y el número de páginas solo puede crecer con las líneas.
+func TestRepartoDelEspacio(t *testing.T) {
+	previas := 1
+	for n := 1; n <= 60; n += 3 {
+		_, paginas := contenido(t, must(ride.Generar(facturaDePrueba(t, n), nil)))
+		if paginas < previas || (n <= 4 && paginas != 1) {
+			t.Errorf("%d líneas: %d páginas (antes %d)", n, paginas, previas)
+		}
+		previas = paginas
+	}
+	pdf := must(ride.Generar(facturaDePrueba(t, 2), nil))
+	if !bytes.Contains(pdf, []byte("/Type /Page /Parent")) {
+		t.Fatal("sin páginas")
+	}
+	if texto, _ := contenido(t, pdf); !strings.Contains(texto, " c h S") {
+		t.Error("las cajas y tablas deben tener el contorno redondeado")
+	}
+}

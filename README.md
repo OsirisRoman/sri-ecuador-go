@@ -65,6 +65,12 @@ Un ejemplo ejecutable completo está en [`example_test.go`](example_test.go).
 | **Recibido** | `sri.EstadoRecibido` | El SRI lo aceptó para procesarlo. **No es aún un comprobante válido** |
 | **Autorizado** | `sri.EstadoAutorizado` | El SRI lo autorizó |
 
+## Cómo integrarlo
+
+La [guía de integración](docs/guia-de-integracion.md) explica el flujo paso a paso, qué significa cada estado, qué debe guardar su aplicación, los errores frecuentes del SRI y una lista de comprobación. El programa [`ejemplos/emision`](ejemplos/emision/main.go) es su ejemplo de referencia y se ejecuta sin configuración: `go run ./ejemplos/emision`.
+
+Si desarrolla con un asistente de IA, indíquele que lea [`AGENTS.md`](AGENTS.md) (o [`llms.txt`](llms.txt)): resume las reglas que no debe saltarse y dónde está cada cosa.
+
 ## Paquetes
 
 | Paquete | Para qué |

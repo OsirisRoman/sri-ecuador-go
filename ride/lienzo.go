@@ -13,6 +13,7 @@ const (
 	pie       = pdf.Alto - margen
 	relleno   = 6.0 // espacio interior de cajas y celdas
 	grosor    = 0.5
+	radio     = 5.0  // radio de las esquinas de cajas y tablas
 	separa    = 14.0 // separación vertical entre bloques
 )
 
@@ -39,6 +40,18 @@ type columna struct {
 type lienzo struct {
 	d *pdf.Documento
 	y float64
+	// extraSep y extraFila son el espacio que se añade a cada separación
+	// entre bloques y a cada fila de tabla para repartir por la hoja un
+	// comprobante corto (ver modelo.dibujar). nSep y nFilas cuentan cuántas
+	// separaciones y filas se han dibujado.
+	extraSep, extraFila float64
+	nSep, nFilas        int
+}
+
+// sep devuelve la separación entre bloques y la cuenta.
+func (l *lienzo) sep() float64 {
+	l.nSep++
+	return separa + l.extraSep
 }
 
 func (l *lienzo) asegurar(alto float64) {
@@ -124,9 +137,9 @@ func (l *lienzo) caja(filas [][]par) {
 	const tam = tamTexto
 	h := l.filasPares(false, 0, 0, anchoUtil-2*relleno, filas, tam) + 2*relleno
 	l.asegurar(h)
-	l.d.Rect(margen, l.y, anchoUtil, h, grosor)
+	l.d.RectRedondeado(margen, l.y, anchoUtil, h, radio, grosor)
 	l.filasPares(true, margen+relleno, l.y+relleno, anchoUtil-2*relleno, filas, tam)
-	l.y += h + separa
+	l.y += h + l.sep()
 }
 
 // tabla dibuja una tabla a partir de x con el ancho dado. Repite la
@@ -156,37 +169,55 @@ func (l *lienzo) tabla(x, ancho float64, cols []columna, filas [][]string) {
 		titulos[i] = c.titulo
 	}
 	hCab := altoFila(titulos, pdf.Negrita, tamCab)
+	// Cada tramo de la tabla (uno por página) lleva su contorno redondeado;
+	// dentro solo se trazan las líneas que separan filas y columnas.
+	inicio := 0.0
 	cabecera := func() {
-		l.d.RectRelleno(x, l.y, ancho, hCab, 0.9)
+		inicio = l.y
+		rInf := 0.0
+		if len(filas) == 0 {
+			rInf = radio
+		}
+		l.d.RellenoRedondeado(x, l.y, ancho, hCab, radio, rInf, 0.9)
 		cx := x
 		for i := range cols {
-			l.d.Rect(cx, l.y, w[i], hCab, grosor)
 			l.parrafo(true, cx+relleno, l.y+relleno, w[i]-2*relleno, titulos[i], pdf.Negrita, tamCab, centro)
 			cx += w[i]
 		}
 		l.y += hCab
 	}
+	cerrar := func() {
+		cx := x
+		for i := 0; i < len(cols)-1; i++ {
+			cx += w[i]
+			l.d.Linea(cx, inicio, cx, l.y, grosor)
+		}
+		l.d.RectRedondeado(x, inicio, ancho, l.y-inicio, radio, grosor)
+	}
 	primera := hCab
 	if len(filas) > 0 {
-		primera += altoFila(filas[0], pdf.Normal, tam)
+		primera += altoFila(filas[0], pdf.Normal, tam) + l.extraFila
 	}
 	l.asegurar(primera)
 	cabecera()
 	for _, fila := range filas {
-		h := altoFila(fila, pdf.Normal, tam)
+		h := altoFila(fila, pdf.Normal, tam) + l.extraFila
+		l.nFilas++
 		if l.y+h > pie {
+			cerrar()
 			l.d.NuevaPagina()
 			l.y = margen
 			cabecera()
 		}
+		l.d.Linea(x, l.y, x+ancho, l.y, grosor)
 		cx := x
 		for i, c := range cols {
-			l.d.Rect(cx, l.y, w[i], h, grosor)
 			if i < len(fila) {
-				l.parrafo(true, cx+relleno, l.y+relleno, w[i]-2*relleno, fila[i], pdf.Normal, tam, c.alinea)
+				l.parrafo(true, cx+relleno, l.y+relleno+l.extraFila/2, w[i]-2*relleno, fila[i], pdf.Normal, tam, c.alinea)
 			}
 			cx += w[i]
 		}
 		l.y += h
 	}
+	cerrar()
 }

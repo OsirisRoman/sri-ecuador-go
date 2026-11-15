@@ -1,0 +1,20 @@
+# sri-ecuador-go
+
+> SDK en Go para la facturación electrónica del SRI de Ecuador (esquema offline): factura, nota de crédito, nota de débito, comprobante de retención, guía de remisión y liquidación de compra. Modelos tipados, cálculo exacto de totales, validación tributaria y XSD, clave de acceso, firma XAdES-BES, servicios web de recepción y autorización, RIDE en PDF y correo de entrega. Go puro, sin cgo.
+
+Módulo: `github.com/OsirisRoman/sri-ecuador-go`. Documentación en español.
+
+## Empezar
+
+- [Guía de integración](docs/guia-de-integracion.md): flujo paso a paso, estados, reglas que no se deben romper, qué guardar, errores frecuentes y lista de comprobación.
+- [Ejemplo de referencia](ejemplos/emision/main.go): programa completo y comentado; se ejecuta sin configuración contra el simulador.
+- [Instrucciones para asistentes de IA](AGENTS.md): resumen de lo esencial para usar o modificar el SDK.
+- [README](README.md): visión general y tabla de paquetes.
+
+## Referencia
+
+- [Capacidades y limitaciones](docs/capacidades.md)
+- [Pruebas contra el SRI real](docs/pruebas-sri.md)
+- [Decisiones de diseño](docs/decisiones.md)
+- [Datos que caducan y cómo actualizarlos](docs/actualizar-catalogos.md)
+- [Fuentes y licencias](docs/fuentes.md)

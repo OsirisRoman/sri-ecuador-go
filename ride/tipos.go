@@ -122,7 +122,7 @@ func deFactura(doc []byte) (*modelo, error) {
 	}
 	m.bloques = append(m.bloques,
 		func(l *lienzo) { l.caja(receptor) },
-		func(l *lienzo) { l.tabla(margen, anchoUtil, columnasVenta, filasVenta(f.Detalles)); l.y += separa })
+		func(l *lienzo) { l.tabla(margen, anchoUtil, columnasVenta, filasVenta(f.Detalles)); l.y += l.sep() })
 	if len(f.Retenciones) > 0 {
 		var filas [][]string
 		for _, r := range f.Retenciones {
@@ -130,7 +130,7 @@ func deFactura(doc []byte) (*modelo, error) {
 		}
 		m.bloques = append(m.bloques, func(l *lienzo) {
 			l.tabla(margen, anchoUtil*0.56, []columna{{"Retención (código)", 3, centro}, {"Código porcentaje", 3, centro}, {"Tarifa", 2, derecha}, {"Valor", 2, derecha}}, filas)
-			l.y += separa
+			l.y += l.sep()
 		})
 	}
 	return m, nil
@@ -159,7 +159,7 @@ func deLiquidacion(doc []byte) (*modelo, error) {
 		adicional: q.InfoAdicional, pagos: i.Pagos, totales: tot,
 		bloques: []func(*lienzo){
 			func(l *lienzo) { l.caja(proveedor) },
-			func(l *lienzo) { l.tabla(margen, anchoUtil, columnasVenta, filasVenta(q.Detalles)); l.y += separa },
+			func(l *lienzo) { l.tabla(margen, anchoUtil, columnasVenta, filasVenta(q.Detalles)); l.y += l.sep() },
 		},
 	}, nil
 }
@@ -191,7 +191,7 @@ func deNotaCredito(doc []byte) (*modelo, error) {
 		adicional: n.InfoAdicional, totales: tot,
 		bloques: []func(*lienzo){
 			func(l *lienzo) { l.caja(receptor) },
-			func(l *lienzo) { l.tabla(margen, anchoUtil, columnasVenta, filas); l.y += separa },
+			func(l *lienzo) { l.tabla(margen, anchoUtil, columnasVenta, filas); l.y += l.sep() },
 		},
 	}, nil
 }
@@ -229,7 +229,7 @@ func deNotaDebito(doc []byte) (*modelo, error) {
 			func(l *lienzo) { l.caja(receptor) },
 			func(l *lienzo) {
 				l.tabla(margen, anchoUtil, []columna{{"RAZÓN DE LA MODIFICACIÓN", 75, izquierda}, {"VALOR DE LA MODIFICACIÓN", 25, derecha}}, filas)
-				l.y += separa
+				l.y += l.sep()
 			},
 		},
 	}, nil
@@ -288,7 +288,7 @@ func deRetencion(doc []byte) (*modelo, error) {
 		adicional: c.InfoAdicional, totales: []par{{"TOTAL RETENIDO", total.Redondear(2).String()}},
 		bloques: []func(*lienzo){
 			func(l *lienzo) { l.caja(sujeto) },
-			func(l *lienzo) { l.tabla(margen, anchoUtil, cols, filas); l.y += separa },
+			func(l *lienzo) { l.tabla(margen, anchoUtil, cols, filas); l.y += l.sep() },
 		},
 	}, nil
 }
@@ -352,9 +352,10 @@ func deGuia(doc []byte) (*modelo, error) {
 		}
 		m.bloques = append(m.bloques, func(l *lienzo) {
 			l.caja(datos)
-			l.y -= separa // la tabla va pegada a su destinatario
+			l.y -= separa + l.extraSep // la tabla va pegada a su destinatario
+			l.nSep--
 			l.tabla(margen, anchoUtil, cols, filas)
-			l.y += separa
+			l.y += l.sep()
 		})
 	}
 	return m, nil
