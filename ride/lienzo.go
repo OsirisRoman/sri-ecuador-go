@@ -40,18 +40,6 @@ type columna struct {
 type lienzo struct {
 	d *pdf.Documento
 	y float64
-	// extraSep y extraFila son el espacio que se añade a cada separación
-	// entre bloques y a cada fila de tabla para repartir por la hoja un
-	// comprobante corto (ver modelo.dibujar). nSep y nFilas cuentan cuántas
-	// separaciones y filas se han dibujado.
-	extraSep, extraFila float64
-	nSep, nFilas        int
-}
-
-// sep devuelve la separación entre bloques y la cuenta.
-func (l *lienzo) sep() float64 {
-	l.nSep++
-	return separa + l.extraSep
 }
 
 func (l *lienzo) asegurar(alto float64) {
@@ -139,7 +127,7 @@ func (l *lienzo) caja(filas [][]par) {
 	l.asegurar(h)
 	l.d.RectRedondeado(margen, l.y, anchoUtil, h, radio, grosor)
 	l.filasPares(true, margen+relleno, l.y+relleno, anchoUtil-2*relleno, filas, tam)
-	l.y += h + l.sep()
+	l.y += h + separa
 }
 
 // tabla dibuja una tabla a partir de x con el ancho dado. Repite la
@@ -196,13 +184,12 @@ func (l *lienzo) tabla(x, ancho float64, cols []columna, filas [][]string) {
 	}
 	primera := hCab
 	if len(filas) > 0 {
-		primera += altoFila(filas[0], pdf.Normal, tam) + l.extraFila
+		primera += altoFila(filas[0], pdf.Normal, tam)
 	}
 	l.asegurar(primera)
 	cabecera()
 	for _, fila := range filas {
-		h := altoFila(fila, pdf.Normal, tam) + l.extraFila
-		l.nFilas++
+		h := altoFila(fila, pdf.Normal, tam)
 		if l.y+h > pie {
 			cerrar()
 			l.d.NuevaPagina()
@@ -213,7 +200,7 @@ func (l *lienzo) tabla(x, ancho float64, cols []columna, filas [][]string) {
 		cx := x
 		for i, c := range cols {
 			if i < len(fila) {
-				l.parrafo(true, cx+relleno, l.y+relleno+l.extraFila/2, w[i]-2*relleno, fila[i], pdf.Normal, tam, c.alinea)
+				l.parrafo(true, cx+relleno, l.y+relleno, w[i]-2*relleno, fila[i], pdf.Normal, tam, c.alinea)
 			}
 			cx += w[i]
 		}
