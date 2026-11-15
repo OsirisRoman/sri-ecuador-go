@@ -188,3 +188,60 @@ func (v *Validador) InfoTributaria(i InfoTributaria, codDoc string) {
 		v.Errorf(p+"contribuyenteRimpe", "catalogo", "debe ser %q o %q (Anexo 22)", RimpeEmprendedor, RimpeNegocioPopular)
 	}
 }
+
+// Adicionales valida los bloques opcionales <infoAdicional> (hasta 15
+// campos, sección 9.11; RUC del proveedor del sistema, Anexo 26) y
+// <maquinaFiscal> (Anexo 13), comunes a todos los comprobantes.
+func (v *Validador) Adicionales(campos []CampoAdicional, m *MaquinaFiscal) {
+	if len(campos) > 15 {
+		v.Errorf("infoAdicional", "maximo", "se admiten hasta 15 campos adicionales, hay %d (sección 9.11)", len(campos))
+	}
+	for i, c := range campos {
+		v.Texto(fmt.Sprintf("infoAdicional[%d].nombre", i), c.Nombre, true, 300)
+		v.Texto(fmt.Sprintf("infoAdicional[%d].valor", i), c.Valor, true, 300)
+		if c.Nombre == NombreRUCProveedor {
+			if err := ValidarRUC(c.Valor); err != nil {
+				v.Errorf(fmt.Sprintf("infoAdicional[%d].valor", i), "ruc.formato", "el campo %q debe contener el RUC del proveedor (Anexo 26): %v", c.Nombre, err)
+			}
+		}
+	}
+	if m != nil {
+		v.Texto("maquinaFiscal.marca", m.Marca, true, 30)
+		v.Texto("maquinaFiscal.modelo", m.Modelo, true, 30)
+		v.Texto("maquinaFiscal.serie", m.Serie, true, 30)
+	}
+}
+
+// DetallesAdicionales valida los <detAdicional> de un detalle (máximo 3).
+// p es la ruta del detalle terminada en punto.
+func (v *Validador) DetallesAdicionales(p string, das []DetAdicional) {
+	if len(das) > 3 {
+		v.Errorf(p+"detallesAdicionales", "maximo", "se admiten hasta 3 detalles adicionales, hay %d", len(das))
+	}
+	for j, da := range das {
+		v.Texto(fmt.Sprintf("%sdetallesAdicionales[%d].nombre", p, j), da.Nombre, true, 300)
+		v.Texto(fmt.Sprintf("%sdetallesAdicionales[%d].valor", p, j), da.Valor, true, 300)
+	}
+}
+
+// Emisor valida los datos opcionales del emisor que se repiten en el bloque
+// de información de cada comprobante. p es la ruta del bloque terminada en
+// punto.
+func (v *Validador) Emisor(p, dirEstablecimiento, contribuyenteEspecial, obligadoContabilidad string) {
+	v.Texto(p+"dirEstablecimiento", dirEstablecimiento, false, 300)
+	if ce := contribuyenteEspecial; ce != "" {
+		ok := len(ce) >= 3 && len(ce) <= 13
+		for i := 0; ok && i < len(ce); i++ {
+			c := ce[i]
+			ok = c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+		}
+		if !ok {
+			v.Errorf(p+"contribuyenteEspecial", "formato", "debe tener de 3 a 13 caracteres alfanuméricos")
+		}
+	}
+	switch obligadoContabilidad {
+	case "", "SI", "NO":
+	default:
+		v.Errorf(p+"obligadoContabilidad", "catalogo", `debe ser "SI" o "NO"`)
+	}
+}

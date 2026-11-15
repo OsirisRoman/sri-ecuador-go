@@ -23,7 +23,8 @@ Leyenda: ✅ implementado y probado · 🚧 parcial · ⏳ pendiente.
 | Nota de crédito v1.0.0 / 1.1.0 | ✅ | Modelo, totales, validación y `DesdeFactura`. Total y parcial **autorizadas** en el ambiente de pruebas (1.1.0). Sin `valorDevolucionIva` (Anexo 20) |
 | Nota de débito v1.0.0 | ✅ | Modelo, totales y validación. **Autorizada** en el ambiente de pruebas. Admite `valorDevolucionIva`, sin probar |
 | Comprobante de retención v2.0.0 (ATS) | ✅ | Modelo completo, cálculo y validación; tablas de retención de IVA y de renta (Catálogo ATS, 127 conceptos; **caduca**, ver `actualizar-catalogos.md`). **Autorizado** en el ambiente de pruebas. La v1.0.0 no se modela |
-| Guía de remisión, liquidación de compra | ⏳ | XSD ya incrustados; faltan los modelos |
+| Guía de remisión v1.0.0 / 1.1.0 | ✅ | Modelo, clave de acceso (fecha de emisión distinta del inicio del transporte), validación; autorizada en pruebas |
+| Liquidación de compra | ⏳ | XSD ya incrustados; falta el modelo |
 | RIDE (representación impresa) | ⏳ | |
 | Envío por correo (`correo`) | 🚧 | Paquete opcional, solo biblioteca estándar. STARTTLS/TLS obligatorios fuera de localhost. Probado contra Mailpit y con un servidor SMTP real (STARTTLS); adjunta el XML autorizado (el RIDE cuando exista) |
 | Devolución de IVA (servicios DIG, sección 13) | ⏳ | |
