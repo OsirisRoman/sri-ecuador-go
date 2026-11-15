@@ -80,6 +80,23 @@ Factura de sustento autorizada (v1.1.0, USD 115,00) y, sobre ella, una nota de d
 
 No se probó `valorDevolucionIva` (requiere el servicio DIG, Anexo 20).
 
+### Ronda 5 — 2026-11-15: comprobante de retención
+
+Comprobante de retención v2.0.0 (ATS) con un documento de sustento (factura de USD 200,00 más IVA 15 %), una retención de renta y una de IVA del 30 %, pago local.
+
+| Intento | Recepción | Autorización |
+|---|---|---|
+| Renta con código 312 al 1,75 % | `RECIBIDA` | **`NO AUTORIZADO`**, error 52 «ERROR EN DIFERENCIAS»: «La tarifa (1.75) no es igual al parametrizado (2.0) para el código de porcentaje 312» |
+| El mismo comprobante con el porcentaje corregido al 2 %, mismo secuencial y **nueva** clave de acceso | `RECIBIDA` | **`AUTORIZADO`** |
+
+Conclusiones:
+
+- El SRI contrasta el porcentaje de cada retención con su propia parametrización del código, que cambia con la normativa. El SDK incluye la tabla de retención de IVA de la ficha (Tabla 20), pero **no** los porcentajes de renta, que pertenecen al catálogo del ATS: un porcentaje desactualizado solo se descubre al autorizar.
+- Un secuencial que quedó `NO AUTORIZADO` puede volver a usarse con otra clave de acceso.
+- El XSD de retención declara la firma con el prefijo `ns1:`; la firma del SDK (prefijo `ds:`, mismo espacio de nombres) es aceptada.
+
+No se probaron: retenciones de ISD, pagos al exterior, dividendos, compra de banano, reembolsos ni la versión 1.0.0.
+
 Qué **no** demuestran estas rondas:
 
 - Un solo certificado (Banco Central del Ecuador) y un solo emisor (persona natural). Certificados de otras entidades (Security Data, ANF, Uanataca…) pueden tener emisores con atributos distintos en `X509IssuerName`.
@@ -93,9 +110,9 @@ Qué **no** demuestran estas rondas:
 | Qué | Con qué | Resultado |
 |---|---|---|
 | Envío con texto, HTML y XML adjunto | Mailpit (contenedor local, sin cifrado) | Entregado; cabeceras, cuerpo y adjunto correctos |
-| Entrega de una nota de crédito autorizada | Servidor SMTP real del propietario, puerto 587 con STARTTLS y autenticación (2026-11-15) | Mensaje **aceptado por el servidor** |
+| Entrega de una nota de crédito autorizada | Servidor SMTP real del propietario, puerto 587 con STARTTLS y autenticación (2026-11-15) | Mensaje aceptado por el servidor y **recibido en la bandeja de entrada** (Gmail), con el cuerpo y el XML adjunto correctos |
 
-«Aceptado por el servidor» no garantiza la llegada a la bandeja de entrada: eso depende de la reputación del remitente (SPF, DKIM, DMARC), ajena al SDK.
+Que un servidor acepte el mensaje no garantiza la llegada a la bandeja de entrada: eso depende de la reputación del remitente (SPF, DKIM, DMARC), ajena al SDK.
 
 ## Producción
 

@@ -27,6 +27,7 @@ import (
 	"github.com/OsirisRoman/sri-ecuador-go/internal/entorno"
 	"github.com/OsirisRoman/sri-ecuador-go/notacredito"
 	"github.com/OsirisRoman/sri-ecuador-go/notadebito"
+	"github.com/OsirisRoman/sri-ecuador-go/retencion"
 	"github.com/OsirisRoman/sri-ecuador-go/xades"
 )
 
@@ -141,6 +142,7 @@ func pagosPendientes(f *factura.Factura) {
 func main() {
 	desde := flag.Int("desde", 0, "primer secuencial a usar (obligatorio)")
 	solo := flag.String("solo", "", "ejecuta solo los escenarios indicados, separados por comas")
+	retDesde := flag.Int("ret-desde", 0, "secuencial de comprobante de retención; activa el escenario de retención")
 	ndDesde := flag.Int("nd-desde", 0, "secuencial de nota de débito; activa el escenario de nota de débito")
 	ncDesde := flag.Int("nc-desde", 0, "primer secuencial de nota de crédito; activa los escenarios de nota de crédito")
 	dir := flag.String("dir", "evidencia-privada", "directorio de evidencias (excluido de Git)")
@@ -173,7 +175,7 @@ func main() {
 		if *solo != "" && !strings.Contains(","+*solo+",", ","+e.nombre+",") {
 			continue
 		}
-		if *solo == "" && (*ncDesde > 0 || *ndDesde > 0) {
+		if *solo == "" && (*ncDesde > 0 || *ndDesde > 0 || *retDesde > 0) {
 			continue // con -nc-desde o -nd-desde y sin -solo no se repiten las facturas
 		}
 		decir("\n== %s (secuencial %d, %s)\n   %s", e.nombre, sec, e.algoritmo, e.descripcion)
@@ -352,7 +354,57 @@ func main() {
 			}
 		}
 	}
-	decir("\nsecuenciales de factura usados: %d a %d; de nota de crédito: %d; escenarios no autorizados: %d", *desde, sec-1, secNC-*ncDesde, fallos)
+	if *retDesde > 0 {
+		decir("\n== retencion (comprobante de retención %d)", *retDesde)
+		it, err := entorno.Emisor(comprobante.CodComprobanteRetencion, *retDesde)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		hoy := comprobante.Hoy()
+		c := &retencion.ComprobanteRetencion{
+			InfoTributaria: it,
+			InfoCompRetencion: retencion.InfoCompRetencion{
+				FechaEmision:                     hoy,
+				ObligadoContabilidad:             entorno.Valor("SRI_EMISOR_OBLIGADO_CONTABILIDAD", "NO"),
+				TipoIdentificacionSujetoRetenido: comprobante.IDRuc,
+				ParteRel:                         "NO",
+				RazonSocialSujetoRetenido:        razonPruebas,
+				IdentificacionSujetoRetenido:     rucSRI,
+			},
+			DocsSustento: []retencion.DocSustento{{
+				CodSustento: "01", CodDocSustento: "01", NumDocSustento: "001001000004321",
+				FechaEmisionDocSustento: hoy, PagoLocExt: retencion.PagoLocal,
+				TotalSinImpuestos: d("200.00"),
+				ImpuestosDocSustento: []retencion.ImpuestoDocSustento{
+					{CodImpuestoDocSustento: comprobante.ImpuestoIVA, CodigoPorcentaje: comprobante.IVA15, BaseImponible: d("200.00")},
+				},
+				Retenciones: []retencion.Retencion{
+					{Codigo: retencion.ImpuestoRenta, CodigoRetencion: "312", BaseImponible: d("200.00"), PorcentajeRetener: d("2")},
+					{Codigo: retencion.ImpuestoIVA, CodigoRetencion: "1", BaseImponible: d("30.00"), PorcentajeRetener: d("30")},
+				},
+				Pagos: []retencion.Pago{{FormaPago: comprobante.PagoOtrosSistFinanciero}},
+			}},
+		}
+		c.Calcular()
+		c.GenerarClaveAcceso("")
+		cli, err := sri.Nuevo(sri.Config{Ambiente: comprobante.Pruebas, Certificado: cert, RUC: it.RUC})
+		if err != nil {
+			panic(err)
+		}
+		if prep, err := cli.Preparar(c); err != nil {
+			decir("   ERROR local: %v", err)
+			fallos++
+		} else {
+			base := filepath.Join(ronda, fmt.Sprintf("ret-%d", *retDesde))
+			os.WriteFile(base+".firmado.xml", prep.XMLFirmado, 0o600)
+			decir("   local: reglas OK, XSD OK, firma verificada; v%s; renta 312 (2 %%) + IVA 30 %%; total retenido %s", retencion.Version, c.TotalRetenido())
+			if !enviar(cli, prep.XMLFirmado, base, decir) {
+				fallos++
+			}
+		}
+	}
+	decir("\nsecuenciales de factura consumidos: %d (desde %d); de nota de crédito: %d; escenarios no autorizados: %d", sec-*desde, *desde, secNC-*ncDesde, fallos)
 	decir("evidencias: %s", ronda)
 }
 
