@@ -138,14 +138,10 @@ type Detalle struct {
 
 // Compensacion es una <compensacion> (figura histórica: descuento solidario
 // de IVA de 2016-2017; se conserva porque el XSD aún la define).
-type Compensacion struct {
-	Codigo string          `xml:"codigo"`
-	Tarifa decimal.Decimal `xml:"tarifa"`
-	Valor  decimal.Decimal `xml:"valor"`
-}
+type Compensacion = comprobante.Compensacion
 
 // CompensacionReembolso es una <compensacionReembolso> de un reembolso.
-type CompensacionReembolso Compensacion
+type CompensacionReembolso comprobante.Compensacion
 
 // Retencion es una <retencion> informativa dentro de la factura (Sección 10
 // de la ficha: comercializadores de derivados del petróleo y retención
@@ -268,9 +264,6 @@ func LineaIVA(codigo, descripcion string, cantidad, precioUnitario decimal.Decim
 
 // EtiquetaXML implementa comprobante.Etiquetado.
 func (Detalle) EtiquetaXML() string { return "detalle" }
-
-// EtiquetaXML implementa comprobante.Etiquetado.
-func (Compensacion) EtiquetaXML() string { return "compensacion" }
 
 // EtiquetaXML implementa comprobante.Etiquetado.
 func (CompensacionReembolso) EtiquetaXML() string { return "compensacionReembolso" }

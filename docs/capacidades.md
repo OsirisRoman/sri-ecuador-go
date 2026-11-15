@@ -20,7 +20,8 @@ Leyenda: ✅ implementado y probado · 🚧 parcial · ⏳ pendiente.
 | Reintentos e idempotencia | ✅ | |
 | Simulador del SRI (`sritest`) | ✅ | |
 | **Interoperabilidad con el SRI real** | 🚧 | Facturas 1.0.0, 1.1.0, 2.0.0 y 2.1.0 **autorizadas** en el ambiente de pruebas (SHA-256 y SHA-1, certificado BCE). Alcance y límites en `pruebas-sri.md` |
-| Nota de crédito, nota de débito, guía de remisión, retención, liquidación de compra | ⏳ | XSD ya incrustados; faltan los modelos |
+| Nota de crédito v1.0.0 / 1.1.0 | ✅ | Modelo, totales, validación y `DesdeFactura`. Total y parcial **autorizadas** en el ambiente de pruebas (1.1.0). Sin `valorDevolucionIva` (Anexo 20) |
+| Nota de débito, guía de remisión, retención, liquidación de compra | ⏳ | XSD ya incrustados; faltan los modelos |
 | RIDE (representación impresa) | ⏳ | |
 | Envío por correo | ⏳ | Será opcional, fuera del núcleo |
 | Devolución de IVA (servicios DIG, sección 13) | ⏳ | |

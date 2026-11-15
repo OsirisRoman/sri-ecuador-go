@@ -59,6 +59,17 @@ Conclusiones:
 - Un comprobante devuelto o no autorizado puede reenviarse corregido con la misma clave de acceso y secuencial, como indica la ficha (5.10).
 - El cálculo de IVA sobre la base acumulada (D5) y el redondeo del SDK no produjeron el error 52.
 
+### Ronda 3 — 2026-11-15: nota de crédito
+
+Para cada caso se emitió primero una factura de sustento (v1.1.0, comprador con RUC, IVA 15 % y 0 %), que quedó autorizada, y después la nota de crédito construida con `notacredito.DesdeFactura`.
+
+| Escenario | Versión | Recepción | Autorización |
+|---|---|---|---|
+| Nota de crédito por el total de la factura | 1.1.0 | `RECIBIDA` | **`AUTORIZADO`** |
+| Nota de crédito parcial (una línea, cantidad menor) | 1.1.0 | `RECIBIDA` | **`AUTORIZADO`** |
+
+Se usó el XSD `NotaCredito_V1.1.0.xsd` (sin `valorDevolucionIva`). No se probó la versión 1.0.0 de la nota de crédito ni el campo de devolución de IVA.
+
 Qué **no** demuestran estas rondas:
 
 - Un solo certificado (Banco Central del Ecuador) y un solo emisor (persona natural). Certificados de otras entidades (Security Data, ANF, Uanataca…) pueden tener emisores con atributos distintos en `X509IssuerName`.

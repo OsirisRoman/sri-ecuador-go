@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/OsirisRoman/sri-ecuador-go/clave"
 	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
 )
@@ -18,7 +17,6 @@ var (
 	reGuia          = regexp.MustCompile(`^[0-9]{3}-[0-9]{3}-[0-9]{9}$`)
 	reContribEsp    = regexp.MustCompile(`^[A-Za-z0-9]{3,13}$`)
 	reFormaPagoXSD  = regexp.MustCompile(`^(0[1-9]|1[0-9]|2[01])$`)
-	tolerancia      = decimal.MustParse("0.01")
 	maxInfoAdic     = 15
 	maxDetAdicional = 3
 )
@@ -77,7 +75,7 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 	} else if info.FechaEmision.Time().After(hoy.Time()) {
 		v.Errorf("infoFactura.fechaEmision", "fecha.futura", "%s es posterior a la fecha actual en Ecuador (%s)", info.FechaEmision, hoy)
 	}
-	f.validarClave(v)
+	v.ClaveAcceso(f.InfoTributaria, info.FechaEmision)
 
 	// --- Emisor --------------------------------------------------------------
 	v.Texto("infoFactura.dirEstablecimiento", info.DirEstablecimiento, false, 300)
@@ -122,10 +120,10 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 		if d.CodigoPrincipal == "" {
 			v.Advertirf(p+"codigoPrincipal", "requerido", "la ficha técnica lo marca como obligatorio aunque el XSD lo admite vacío")
 		}
-		numero(v, p+"cantidad", d.Cantidad, 18, decimalesCantidad)
-		numero(v, p+"precioUnitario", d.PrecioUnitario, 18, decimalesCantidad)
-		numero(v, p+"descuento", d.Descuento, 14, 2)
-		numero(v, p+"precioTotalSinImpuesto", d.PrecioTotalSinImpuesto, 14, 2)
+		v.Numero(p+"cantidad", d.Cantidad, 18, decimalesCantidad)
+		v.Numero(p+"precioUnitario", d.PrecioUnitario, 18, decimalesCantidad)
+		v.Numero(p+"descuento", d.Descuento, 14, 2)
+		v.Numero(p+"precioTotalSinImpuesto", d.PrecioTotalSinImpuesto, 14, 2)
 		if esperado := totalLinea(d); !d.PrecioTotalSinImpuesto.Igual(esperado) {
 			v.Errorf(p+"precioTotalSinImpuesto", "detalle.total",
 				"es %s pero cantidad × precioUnitario − descuento = %s", d.PrecioTotalSinImpuesto, esperado)
@@ -141,17 +139,17 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 			v.Errorf(p+"impuestos", "requerido", "cada detalle debe declarar al menos un impuesto (use IVA 0%%, no objeto o exento si no grava)")
 		}
 		for j, imp := range d.Impuestos {
-			validarImpuesto(v, fmt.Sprintf("%simpuestos[%d].", p, j), imp)
+			v.ImpuestoLinea(fmt.Sprintf("%simpuestos[%d].", p, j), imp)
 		}
 		sumaLineas = sumaLineas.Sumar(d.PrecioTotalSinImpuesto)
 		sumaDesc = sumaDesc.Sumar(d.Descuento)
 	}
 
 	// --- Totales -------------------------------------------------------------
-	numero(v, "infoFactura.totalSinImpuestos", info.TotalSinImpuestos, 14, 2)
-	numero(v, "infoFactura.totalDescuento", info.TotalDescuento, 14, 2)
-	numero(v, "infoFactura.propina", info.Propina, 14, 2)
-	numero(v, "infoFactura.importeTotal", info.ImporteTotal, 14, 2)
+	v.Numero("infoFactura.totalSinImpuestos", info.TotalSinImpuestos, 14, 2)
+	v.Numero("infoFactura.totalDescuento", info.TotalDescuento, 14, 2)
+	v.Numero("infoFactura.propina", info.Propina, 14, 2)
+	v.Numero("infoFactura.importeTotal", info.ImporteTotal, 14, 2)
 	if len(f.Detalles) > 0 {
 		if !info.TotalSinImpuestos.Igual(sumaLineas) {
 			v.Errorf("infoFactura.totalSinImpuestos", "totales.sin-impuestos", "es %s pero los detalles suman %s", info.TotalSinImpuestos, sumaLineas.Redondear(2))
@@ -160,7 +158,7 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 			v.Errorf("infoFactura.totalDescuento", "totales.descuento", "es %s pero los descuentos de los detalles suman %s", info.TotalDescuento, sumaDesc.Redondear(2))
 		}
 	}
-	impuestos := f.validarTotalesImpuestos(v)
+	impuestos := v.TotalesImpuestos("infoFactura.totalConImpuestos", info.TotalConImpuestos, f.impuestosPorLinea()...)
 	if esperado := f.importeEsperado(impuestos); !info.ImporteTotal.Igual(esperado) {
 		v.Errorf("infoFactura.importeTotal", "totales.importe",
 			"es %s pero totalSinImpuestos + impuestos + propina y demás rubros = %s", info.ImporteTotal, esperado)
@@ -179,7 +177,7 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 		case !enTabla:
 			v.Advertirf(p+"formaPago", "catalogo", "el código %q no figura entre las formas de pago vigentes de la Tabla 24", pg.FormaPago)
 		}
-		numero(v, p+"total", pg.Total, 14, 2)
+		v.Numero(p+"total", pg.Total, 14, 2)
 		v.Texto(p+"unidadTiempo", pg.UnidadTiempo, false, 10)
 		sumaPagos = sumaPagos.Sumar(pg.Total)
 	}
@@ -210,138 +208,7 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 	}
 	for i, r := range f.OtrosRubrosTerceros {
 		v.Texto(fmt.Sprintf("otrosRubrosTerceros[%d].concepto", i), r.Concepto, true, 300)
-		numero(v, fmt.Sprintf("otrosRubrosTerceros[%d].total", i), r.Total, 14, 2)
+		v.Numero(fmt.Sprintf("otrosRubrosTerceros[%d].total", i), r.Total, 14, 2)
 	}
 	return v.Hallazgos()
-}
-
-// validarClave comprueba que la clave de acceso sea válida y que cada uno
-// de sus componentes coincida con el comprobante (rechazo 58 del SRI).
-func (f *Factura) validarClave(v *comprobante.Validador) {
-	const campo = "infoTributaria.claveAcceso"
-	it := f.InfoTributaria
-	if it.ClaveAcceso == "" {
-		v.Errorf(campo, "requerido", "falta la clave de acceso; use GenerarClaveAcceso")
-		return
-	}
-	c, err := clave.Analizar(it.ClaveAcceso)
-	if err != nil {
-		v.Errorf(campo, "clave.formato", "%v", err)
-		return
-	}
-	dif := func(nombre, enClave, enDoc string) {
-		if enClave != enDoc {
-			v.Errorf(campo, "clave.coherencia", "%s de la clave (%s) no coincide con el comprobante (%s)", nombre, enClave, enDoc)
-		}
-	}
-	if !f.InfoFactura.FechaEmision.EsCero() {
-		dif("la fecha de emisión", c.FechaEmision.Format("02/01/2006"), f.InfoFactura.FechaEmision.String())
-	}
-	dif("el tipo de comprobante", c.TipoComprobante, it.CodDoc)
-	dif("el RUC", c.RUC, it.RUC)
-	dif("el ambiente", c.Ambiente, string(it.Ambiente))
-	dif("el establecimiento", c.Establecimiento, it.Estab)
-	dif("el punto de emisión", c.PuntoEmision, it.PtoEmi)
-	dif("el secuencial", c.Secuencial, it.Secuencial)
-	dif("el tipo de emisión", c.TipoEmision, it.TipoEmision)
-}
-
-func validarImpuesto(v *comprobante.Validador, p string, imp comprobante.Impuesto) {
-	numero(v, p+"tarifa", imp.Tarifa, 4, 2)
-	numero(v, p+"baseImponible", imp.BaseImponible, 14, 2)
-	numero(v, p+"valor", imp.Valor, 14, 2)
-	if !comprobante.SoloDigitos(imp.CodigoPorcentaje) || len(imp.CodigoPorcentaje) > 4 {
-		v.Errorf(p+"codigoPorcentaje", "formato", "debe tener de 1 a 4 dígitos")
-	}
-	switch imp.Codigo {
-	case comprobante.ImpuestoIVA:
-		t, ok := comprobante.TarifasIVA[imp.CodigoPorcentaje]
-		if !ok {
-			v.Errorf(p+"codigoPorcentaje", "catalogo", "código de IVA %q desconocido (Tabla 17)", imp.CodigoPorcentaje)
-			return
-		}
-		if t.Fija && !imp.Tarifa.Igual(t.Tarifa) {
-			v.Errorf(p+"tarifa", "iva.tarifa", "el código %s corresponde a %s; la tarifa declarada es %s", t.Codigo, t.Descripcion, imp.Tarifa)
-		}
-		esperado := imp.BaseImponible.Porcentaje(imp.Tarifa).Redondear(2)
-		if imp.Valor.Restar(esperado).Abs().Cmp(tolerancia) > 0 {
-			v.Errorf(p+"valor", "iva.valor", "es %s pero base × tarifa = %s", imp.Valor, esperado)
-		}
-	case comprobante.ImpuestoICE, comprobante.ImpuestoIRBPNR:
-		// Tarifas específicas o mixtas: no se recalculan aquí.
-	default:
-		v.Errorf(p+"codigo", "catalogo", "código de impuesto %q desconocido (Tabla 16: 2 IVA, 3 ICE, 5 IRBPNR)", imp.Codigo)
-	}
-}
-
-// validarTotalesImpuestos contrasta <totalConImpuestos> con los detalles y
-// devuelve la suma de los valores declarados.
-func (f *Factura) validarTotalesImpuestos(v *comprobante.Validador) decimal.Decimal {
-	info := &f.InfoFactura
-	if len(info.TotalConImpuestos) == 0 {
-		v.Errorf("infoFactura.totalConImpuestos", "requerido", "debe contener al menos un totalImpuesto")
-	}
-	type par struct{ codigo, porcentaje string }
-	// Varios grupos de detalle (IVA diferenciado con tarifas distintas)
-	// pueden corresponder a un mismo par código/porcentaje.
-	bases := map[par]decimal.Decimal{}
-	recalculado := map[par]decimal.Decimal{}
-	sumaLineas := map[par]decimal.Decimal{}
-	for _, g := range f.agrupar() {
-		k := par{g.clave.codigo, g.clave.porcentaje}
-		bases[k] = bases[k].Sumar(g.base)
-		recalculado[k] = recalculado[k].Sumar(g.valor())
-		sumaLineas[k] = sumaLineas[k].Sumar(g.sumaLineas)
-	}
-	declarados := map[par]comprobante.TotalImpuesto{}
-	total := decimal.Cero
-	for i, t := range info.TotalConImpuestos {
-		p := fmt.Sprintf("infoFactura.totalConImpuestos[%d].", i)
-		k := par{t.Codigo, t.CodigoPorcentaje}
-		numero(v, p+"baseImponible", t.BaseImponible, 14, 2)
-		numero(v, p+"valor", t.Valor, 14, 2)
-		if prev, repetido := declarados[k]; repetido {
-			t.BaseImponible = t.BaseImponible.Sumar(prev.BaseImponible)
-			t.Valor = t.Valor.Sumar(prev.Valor)
-		}
-		declarados[k] = t
-		total = total.Sumar(info.TotalConImpuestos[i].Valor)
-		if _, ok := bases[k]; !ok && len(f.Detalles) > 0 {
-			v.Errorf(p+"codigo", "totales.impuesto-sin-detalle", "el impuesto %s/%s no aparece en ningún detalle", t.Codigo, t.CodigoPorcentaje)
-		}
-	}
-	for k, base := range bases {
-		t, ok := declarados[k]
-		campo := fmt.Sprintf("infoFactura.totalConImpuestos(%s/%s)", k.codigo, k.porcentaje)
-		if !ok {
-			v.Errorf(campo, "totales.impuesto-faltante", "los detalles declaran el impuesto %s/%s pero falta en totalConImpuestos", k.codigo, k.porcentaje)
-			continue
-		}
-		if !t.BaseImponible.Igual(base) {
-			v.Errorf(campo+".baseImponible", "totales.base", "es %s pero las bases de los detalles suman %s", t.BaseImponible, base.Redondear(2))
-		}
-		// Se acepta tanto el impuesto calculado sobre la base acumulada
-		// como la suma de los impuestos de cada línea: ambos criterios son
-		// de uso corriente y difieren, como mucho, en centavos de redondeo.
-		if !t.Valor.Igual(recalculado[k]) && !t.Valor.Igual(sumaLineas[k]) {
-			v.Errorf(campo+".valor", "totales.impuesto", "es %s; se esperaba %s (sobre la base total) o %s (suma de las líneas)",
-				t.Valor, recalculado[k], sumaLineas[k].Redondear(2))
-		}
-	}
-	return total
-}
-
-// numero valida las facetas de un xsd:decimal del SRI: no negativo, con un
-// máximo de dígitos totales y de decimales.
-func numero(v *comprobante.Validador, campo string, d decimal.Decimal, totalDigitos, decimales int) {
-	if d.Signo() < 0 {
-		v.Errorf(campo, "negativo", "no puede ser negativo (%s)", d)
-	}
-	enteros, frac := d.Digitos()
-	if frac > decimales {
-		v.Errorf(campo, "decimales", "%s tiene %d decimales; el máximo es %d", d, frac, decimales)
-	}
-	if enteros+frac > totalDigitos {
-		v.Errorf(campo, "digitos", "%s tiene %d dígitos; el máximo es %d", d, enteros+frac, totalDigitos)
-	}
 }

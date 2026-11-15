@@ -1,61 +1,22 @@
 package factura
 
 import (
-	"github.com/OsirisRoman/sri-ecuador-go/clave"
 	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
 )
 
-// claveGrupo agrupa impuestos para <totalConImpuestos>. La tarifa forma
-// parte de la clave porque el IVA diferenciado (código 8) puede aparecer con
-// tarifas distintas bajo el mismo código.
-type claveGrupo struct {
-	codigo, porcentaje, tarifa string
-}
-
-type grupo struct {
-	clave  claveGrupo
-	tarifa decimal.Decimal
-	base   decimal.Decimal
-	// sumaLineas es la suma de los valores de impuesto ya redondeados de
-	// cada línea.
-	sumaLineas decimal.Decimal
+// impuestosPorLinea devuelve los impuestos de cada detalle.
+func (f *Factura) impuestosPorLinea() [][]comprobante.Impuesto {
+	out := make([][]comprobante.Impuesto, len(f.Detalles))
+	for i, d := range f.Detalles {
+		out[i] = d.Impuestos
+	}
+	return out
 }
 
 // totalLinea devuelve cantidad × precioUnitario − descuento con 2 decimales.
 func totalLinea(d Detalle) decimal.Decimal {
-	return d.Cantidad.Multiplicar(d.PrecioUnitario).Restar(d.Descuento).Redondear(2)
-}
-
-// agrupar recorre los impuestos de los detalles en orden de aparición.
-func (f *Factura) agrupar() []*grupo {
-	var orden []*grupo
-	indice := map[claveGrupo]*grupo{}
-	for _, d := range f.Detalles {
-		for _, imp := range d.Impuestos {
-			k := claveGrupo{imp.Codigo, imp.CodigoPorcentaje, imp.Tarifa.Redondear(2).String()}
-			g, ok := indice[k]
-			if !ok {
-				g = &grupo{clave: k, tarifa: imp.Tarifa}
-				indice[k] = g
-				orden = append(orden, g)
-			}
-			g.base = g.base.Sumar(imp.BaseImponible)
-			g.sumaLineas = g.sumaLineas.Sumar(imp.Valor)
-		}
-	}
-	return orden
-}
-
-// valorGrupo es el impuesto total de un grupo. Para el IVA se calcula sobre
-// la base acumulada (base × tarifa), que es como se liquida el impuesto del
-// comprobante; para ICE e IRBPNR, que pueden tener tarifas específicas por
-// unidad, se suman los valores de las líneas.
-func (g *grupo) valor() decimal.Decimal {
-	if g.clave.codigo == comprobante.ImpuestoIVA {
-		return g.base.Porcentaje(g.tarifa).Redondear(2)
-	}
-	return g.sumaLineas.Redondear(2)
+	return comprobante.TotalLinea(d.Cantidad, d.PrecioUnitario, d.Descuento)
 }
 
 // Calcular completa los importes derivados a partir de cantidad, precio
@@ -83,36 +44,7 @@ func (f *Factura) Calcular() {
 		totalSin = totalSin.Sumar(d.PrecioTotalSinImpuesto)
 		totalDesc = totalDesc.Sumar(d.Descuento)
 
-		// Primero ICE/IRBPNR: el ICE forma parte de la base del IVA.
-		ice := decimal.Cero
-		for j := range d.Impuestos {
-			imp := &d.Impuestos[j]
-			if imp.Codigo == comprobante.ImpuestoIVA {
-				continue
-			}
-			if imp.BaseImponible.EsCero() {
-				imp.BaseImponible = d.PrecioTotalSinImpuesto
-			}
-			imp.BaseImponible = imp.BaseImponible.Redondear(2)
-			if imp.Valor.EsCero() && !imp.Tarifa.EsCero() {
-				imp.Valor = imp.BaseImponible.Porcentaje(imp.Tarifa)
-			}
-			imp.Valor = imp.Valor.Redondear(2)
-			if imp.Codigo == comprobante.ImpuestoICE {
-				ice = ice.Sumar(imp.Valor)
-			}
-		}
-		for j := range d.Impuestos {
-			imp := &d.Impuestos[j]
-			if imp.Codigo != comprobante.ImpuestoIVA {
-				continue
-			}
-			if t, ok := comprobante.TarifasIVA[imp.CodigoPorcentaje]; ok && t.Fija {
-				imp.Tarifa = t.Tarifa
-			}
-			imp.BaseImponible = d.PrecioTotalSinImpuesto.Sumar(ice).Redondear(2)
-			imp.Valor = imp.BaseImponible.Porcentaje(imp.Tarifa).Redondear(2)
-		}
+		comprobante.CalcularImpuestos(d.PrecioTotalSinImpuesto, d.Impuestos)
 	}
 
 	info := &f.InfoFactura
@@ -121,22 +53,23 @@ func (f *Factura) Calcular() {
 
 	// Se conservan los datos que el usuario haya puesto en un total y que
 	// no se derivan de los detalles.
-	previos := map[claveGrupo]comprobante.TotalImpuesto{}
+	type par struct{ codigo, porcentaje string }
+	previos := map[par]comprobante.TotalImpuesto{}
 	for _, t := range info.TotalConImpuestos {
-		previos[claveGrupo{codigo: t.Codigo, porcentaje: t.CodigoPorcentaje}] = t
+		previos[par{t.Codigo, t.CodigoPorcentaje}] = t
 	}
 	info.TotalConImpuestos = nil
 	impuestos := decimal.Cero
-	for _, g := range f.agrupar() {
-		tarifa := g.tarifa.Redondear(2)
+	for _, g := range comprobante.AgruparImpuestos(f.impuestosPorLinea()...) {
+		tarifa := g.Tarifa.Redondear(2)
 		t := comprobante.TotalImpuesto{
-			Codigo:           g.clave.codigo,
-			CodigoPorcentaje: g.clave.porcentaje,
-			BaseImponible:    g.base.Redondear(2),
+			Codigo:           g.Codigo,
+			CodigoPorcentaje: g.CodigoPorcentaje,
+			BaseImponible:    g.Base.Redondear(2),
 			Tarifa:           &tarifa,
-			Valor:            g.valor(),
+			Valor:            g.Valor(),
 		}
-		if p, ok := previos[claveGrupo{codigo: g.clave.codigo, porcentaje: g.clave.porcentaje}]; ok {
+		if p, ok := previos[par{g.Codigo, g.CodigoPorcentaje}]; ok {
 			t.DescuentoAdicional = p.DescuentoAdicional
 			t.ValorDevolucionIva = p.ValorDevolucionIva
 		}
@@ -181,33 +114,5 @@ func (f *Factura) importeEsperado(impuestos decimal.Decimal) decimal.Decimal {
 // su vida: guárdela, porque un comprobante devuelto o no autorizado debe
 // reenviarse con la misma clave (ficha técnica 5.10).
 func (f *Factura) GenerarClaveAcceso(codigoNumerico string) (string, error) {
-	if codigoNumerico == "" {
-		var err error
-		if codigoNumerico, err = clave.CodigoAleatorio(); err != nil {
-			return "", err
-		}
-	}
-	it := &f.InfoTributaria
-	if it.CodDoc == "" {
-		it.CodDoc = comprobante.CodFactura
-	}
-	if it.TipoEmision == "" {
-		it.TipoEmision = comprobante.EmisionNormal
-	}
-	c, err := clave.Generar(clave.Componentes{
-		FechaEmision:    f.InfoFactura.FechaEmision.Time(),
-		TipoComprobante: it.CodDoc,
-		RUC:             it.RUC,
-		Ambiente:        string(it.Ambiente),
-		Establecimiento: it.Estab,
-		PuntoEmision:    it.PtoEmi,
-		Secuencial:      it.Secuencial,
-		CodigoNumerico:  codigoNumerico,
-		TipoEmision:     it.TipoEmision,
-	})
-	if err != nil {
-		return "", err
-	}
-	it.ClaveAcceso = c
-	return c, nil
+	return comprobante.GenerarClaveAcceso(&f.InfoTributaria, f.InfoFactura.FechaEmision, comprobante.CodFactura, codigoNumerico)
 }

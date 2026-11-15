@@ -1,6 +1,10 @@
 package comprobante
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+
+	"github.com/OsirisRoman/sri-ecuador-go/decimal"
+)
 
 // Etiquetado lo implementan los tipos que pueden ir en una Lista: indica el
 // nombre del elemento XML de cada ítem.
@@ -69,3 +73,14 @@ func (CampoAdicional) EtiquetaXML() string { return "campoAdicional" }
 
 // EtiquetaXML implementa Etiquetado.
 func (DetAdicional) EtiquetaXML() string { return "detAdicional" }
+
+// Compensacion es una <compensacion> (figura histórica: descuento solidario
+// de IVA de 2016-2017; se conserva porque los XSD aún la definen).
+type Compensacion struct {
+	Codigo string          `xml:"codigo"`
+	Tarifa decimal.Decimal `xml:"tarifa"`
+	Valor  decimal.Decimal `xml:"valor"`
+}
+
+// EtiquetaXML implementa Etiquetado.
+func (Compensacion) EtiquetaXML() string { return "compensacion" }
