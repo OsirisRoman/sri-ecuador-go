@@ -17,4 +17,5 @@ Módulo: `github.com/OsirisRoman/sri-ecuador-go`. Documentación en español.
 - [Pruebas contra el SRI real](docs/pruebas-sri.md)
 - [Decisiones de diseño](docs/decisiones.md)
 - [Datos que caducan y cómo actualizarlos](docs/actualizar-catalogos.md)
+- [Devolución automática de IVA (DIG): no implementada; investigación](docs/devolucion-iva-dig.md)
 - [Fuentes y licencias](docs/fuentes.md)

@@ -42,4 +42,5 @@ gofmt -l <directorios del proyecto>  # no ejecutes gofmt sobre "." si existe res
 | Qué se ha probado contra el SRI | `docs/pruebas-sri.md` |
 | Decisiones de diseño | `docs/decisiones.md` |
 | Datos que caducan y cómo actualizarlos | `docs/actualizar-catalogos.md` |
+| Devolución automática de IVA (DIG), no implementada | `docs/devolucion-iva-dig.md` |
 | Fuentes y licencias | `docs/fuentes.md`, `NOTICE` |

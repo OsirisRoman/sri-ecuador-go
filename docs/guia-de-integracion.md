@@ -15,6 +15,7 @@ No hace (es responsabilidad de su aplicación):
 - **Decidir la tributación**: qué tarifa de IVA aplica a un producto, qué retención corresponde a una compra, etc. El SDK valida la coherencia, no el criterio tributario.
 - **Custodiar** el certificado `.p12` y su contraseña.
 - Anular comprobantes (se hace en el portal del SRI) ni emitir en contingencia.
+- La devolución automática del IVA a adultos mayores (servicios DIG): no está implementada; ver [`devolucion-iva-dig.md`](devolucion-iva-dig.md).
 
 ## 2. Instalación y requisitos
 
