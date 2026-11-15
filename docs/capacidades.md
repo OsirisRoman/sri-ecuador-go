@@ -20,12 +20,12 @@ Leyenda: ✅ implementado y probado · 🚧 parcial · ⏳ pendiente.
 | SOAP factura comercial negociable | ⏳ | |
 | Reintentos e idempotencia | ✅ | |
 | Simulador del SRI (`sritest`) | ✅ | |
-| **Interoperabilidad con el SRI real** | 🚧 | Facturas 1.0.0, 1.1.0, 2.0.0 y 2.1.0 **autorizadas** en el ambiente de pruebas (SHA-256 y SHA-1, certificado BCE). Alcance y límites en `pruebas-sri.md` |
+| **Interoperabilidad con el SRI real** | 🚧 | Los seis tipos de comprobante **autorizados** en el ambiente de pruebas (SHA-256 y SHA-1, certificado BCE), más exportación, reembolso y lotes. Un solo certificado y un solo emisor; nada en producción. Alcance y límites en `pruebas-sri.md` |
 | Nota de crédito v1.0.0 / 1.1.0 | ✅ | Modelo, totales, validación y `DesdeFactura`. Total y parcial **autorizadas** en el ambiente de pruebas (1.1.0). Sin `valorDevolucionIva` (Anexo 20) |
 | Nota de débito v1.0.0 | ✅ | Modelo, totales y validación. **Autorizada** en el ambiente de pruebas. Admite `valorDevolucionIva`, sin probar |
 | Comprobante de retención v2.0.0 (ATS) | ✅ | Modelo completo, cálculo y validación; tablas de retención de IVA y de renta (Catálogo ATS, 127 conceptos; **caduca**, ver `actualizar-catalogos.md`). **Autorizado** en el ambiente de pruebas. La v1.0.0 no se modela |
 | Guía de remisión v1.0.0 / 1.1.0 | ✅ | Modelo, clave de acceso (fecha de emisión distinta del inicio del transporte), validación. **Autorizada** en el ambiente de pruebas |
 | Liquidación de compra v1.0.0 / 1.1.0 | ✅ | Modelo, totales (incluidos los de reembolso) y validación; **autorizada** en el ambiente de pruebas. Reembolsos sin probar contra el SRI |
-| RIDE (representación impresa, PDF) | ✅ | Los seis comprobantes, según los modelos del Anexo 2. Generador propio sin dependencias; código de barras Code 128 verificado con un lector (zbar); logotipo PNG/JPEG (los grandes se reducen; sin logotipo se reserva el espacio con «NO TIENE LOGO», como hace el SRI); paginación; bordes redondeados y reparto del espacio en comprobantes cortos. Sin fuentes incrustadas ni PDF/A; caracteres fuera de Windows-1252 se sustituyen |
+| RIDE (representación impresa, PDF) | ✅ | Los seis comprobantes, según los modelos del Anexo 2. Generador propio sin dependencias; código de barras Code 128 verificado con un lector (zbar); logotipo PNG/JPEG (se recortan sus márgenes en blanco y los grandes se reducen; sin logotipo se reserva el espacio con «NO TIENE LOGO», como hace el SRI); paginación; bordes redondeados y reparto del espacio en comprobantes cortos. Sin fuentes incrustadas ni PDF/A; caracteres fuera de Windows-1252 se sustituyen |
 | Envío por correo (`correo`) | 🚧 | Paquete opcional, solo biblioteca estándar. STARTTLS/TLS obligatorios fuera de localhost. Probado contra Mailpit y con un servidor SMTP real (STARTTLS); adjunta el XML autorizado y el RIDE |
 | Devolución de IVA (servicios DIG, sección 13) | ⏳ | |
