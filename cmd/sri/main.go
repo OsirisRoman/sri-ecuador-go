@@ -8,7 +8,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -24,6 +23,7 @@ import (
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
 	"github.com/OsirisRoman/sri-ecuador-go/esquema"
 	"github.com/OsirisRoman/sri-ecuador-go/factura"
+	"github.com/OsirisRoman/sri-ecuador-go/internal/entorno"
 	"github.com/OsirisRoman/sri-ecuador-go/xades"
 )
 
@@ -50,7 +50,7 @@ func main() {
 		fmt.Fprint(os.Stderr, uso)
 		os.Exit(2)
 	}
-	cargarEnv(".env")
+	entorno.CargarEnv(".env")
 	var err error
 	switch orden, args := os.Args[1], os.Args[2:]; orden {
 	case "certificado":
@@ -81,58 +81,8 @@ func main() {
 	}
 }
 
-// cargarEnv lee pares CLAVE=valor de un archivo sin sobrescribir variables
-// ya definidas en el entorno.
-func cargarEnv(ruta string) {
-	f, err := os.Open(ruta)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		linea := strings.TrimSpace(sc.Text())
-		if linea == "" || strings.HasPrefix(linea, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(linea, "=")
-		if !ok {
-			continue
-		}
-		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
-		if len(v) >= 2 && (v[0] == '"' && v[len(v)-1] == '"' || v[0] == '\'' && v[len(v)-1] == '\'') {
-			v = v[1 : len(v)-1]
-		}
-		if _, existe := os.LookupEnv(k); !existe {
-			os.Setenv(k, v)
-		}
-	}
-}
-
-func cargarCertificado() (*certificado.Certificado, error) {
-	ruta := os.Getenv("SRI_P12_PATH")
-	if ruta == "" {
-		return nil, errors.New("defina SRI_P12_PATH con la ruta del archivo .p12")
-	}
-	clave := os.Getenv("SRI_P12_PASSWORD")
-	if f := os.Getenv("SRI_P12_PASSWORD_FILE"); clave == "" && f != "" {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			return nil, fmt.Errorf("no se pudo leer SRI_P12_PASSWORD_FILE: %w", err)
-		}
-		clave = strings.TrimRight(string(b), "\r\n")
-	}
-	if clave == "" {
-		return nil, errors.New("defina SRI_P12_PASSWORD o SRI_P12_PASSWORD_FILE")
-	}
-	if info, err := os.Stat(ruta); err == nil && info.Mode().Perm()&0o077 != 0 {
-		fmt.Fprintf(os.Stderr, "aviso: %s es legible por otros usuarios; se recomienda chmod 600\n", ruta)
-	}
-	return certificado.CargarArchivo(ruta, clave)
-}
-
 func cmdCertificado() error {
-	c, err := cargarCertificado()
+	c, err := entorno.Certificado()
 	if err != nil {
 		return err
 	}
@@ -213,7 +163,7 @@ func cmdFirmar(args []string) error {
 	if err != nil {
 		return err
 	}
-	c, err := cargarCertificado()
+	c, err := entorno.Certificado()
 	if err != nil {
 		return err
 	}
@@ -246,13 +196,6 @@ func cmdVerificar(args []string) error {
 	return nil
 }
 
-func env(nombre, porDefecto string) string {
-	if v := os.Getenv(nombre); v != "" {
-		return v
-	}
-	return porDefecto
-}
-
 func nuevoCliente(c *certificado.Certificado, a xades.Algoritmo) (*sri.Cliente, error) {
 	// Este comando solo opera contra el ambiente de pruebas.
 	return sri.Nuevo(sri.Config{Ambiente: comprobante.Pruebas, Certificado: c, Algoritmo: a, RUC: os.Getenv("SRI_EMISOR_RUC")})
@@ -266,41 +209,28 @@ func cmdFacturaPrueba(args []string) error {
 	enviar := fs.Bool("enviar", false, "envía la factura al ambiente de PRUEBAS del SRI (sin esta opción solo se genera y firma)")
 	dir := fs.String("dir", "evidencia-privada", "directorio donde guardar los XML y respuestas")
 	fs.Parse(args)
-	if *secuencial < 1 || *secuencial > 999999999 {
+	if *secuencial < 1 {
 		return errors.New("indique -secuencial con un número que no haya usado antes en el ambiente de pruebas")
 	}
 	a, err := algoritmo(*alg)
 	if err != nil {
 		return err
 	}
-	for _, v := range []string{"SRI_EMISOR_RUC", "SRI_EMISOR_RAZON_SOCIAL", "SRI_EMISOR_DIR_MATRIZ"} {
-		if os.Getenv(v) == "" {
-			return fmt.Errorf("falta la variable %s (ver .env.example)", v)
-		}
+	c, err := entorno.Certificado()
+	if err != nil {
+		return err
 	}
-	c, err := cargarCertificado()
+	emisor, err := entorno.Emisor(comprobante.CodFactura, *secuencial)
 	if err != nil {
 		return err
 	}
 	f := &factura.Factura{
-		Version: *version,
-		InfoTributaria: comprobante.InfoTributaria{
-			Ambiente: comprobante.Pruebas, TipoEmision: comprobante.EmisionNormal,
-			RazonSocial:        os.Getenv("SRI_EMISOR_RAZON_SOCIAL"),
-			NombreComercial:    os.Getenv("SRI_EMISOR_NOMBRE_COMERCIAL"),
-			RUC:                os.Getenv("SRI_EMISOR_RUC"),
-			CodDoc:             comprobante.CodFactura,
-			Estab:              env("SRI_EMISOR_ESTAB", "001"),
-			PtoEmi:             env("SRI_EMISOR_PTO_EMI", "001"),
-			Secuencial:         fmt.Sprintf("%09d", *secuencial),
-			DirMatriz:          os.Getenv("SRI_EMISOR_DIR_MATRIZ"),
-			AgenteRetencion:    os.Getenv("SRI_EMISOR_AGENTE_RETENCION"),
-			ContribuyenteRimpe: os.Getenv("SRI_EMISOR_CONTRIBUYENTE_RIMPE"),
-		},
+		Version:        *version,
+		InfoTributaria: emisor,
 		InfoFactura: factura.InfoFactura{
 			FechaEmision:                comprobante.Hoy(),
-			DirEstablecimiento:          env("SRI_EMISOR_DIR_ESTABLECIMIENTO", os.Getenv("SRI_EMISOR_DIR_MATRIZ")),
-			ObligadoContabilidad:        env("SRI_EMISOR_OBLIGADO_CONTABILIDAD", "NO"),
+			DirEstablecimiento:          entorno.Valor("SRI_EMISOR_DIR_ESTABLECIMIENTO", os.Getenv("SRI_EMISOR_DIR_MATRIZ")),
+			ObligadoContabilidad:        entorno.Valor("SRI_EMISOR_OBLIGADO_CONTABILIDAD", "NO"),
 			ContribuyenteEspecial:       os.Getenv("SRI_EMISOR_CONTRIBUYENTE_ESPECIAL"),
 			TipoIdentificacionComprador: comprobante.IDConsumidorFinal,
 			RazonSocialComprador:        comprobante.RazonSocialConsumidorFinal,

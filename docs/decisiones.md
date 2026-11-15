@@ -8,7 +8,7 @@ Cada entrada indica qué se decidió, por qué y qué alternativa se descartó. 
 
 ## D2. Firma: estructura del Anexo 14, RSA-SHA256 por defecto
 La ficha (6.8) dice literalmente «Algoritmo de firmado: RSA-SHA1» y el Anexo 14 muestra SHA-1 en firma y digest. SHA-1 está en desuso criptográfico. Se planteó como experimento: el 2026-11-14 el ambiente de certificación del SRI **autorizó** una factura firmada por este SDK con RSA-SHA256 (firma y los tres digest en SHA-256). Con esa evidencia, y por decisión del propietario del proyecto, **SHA-256 es el valor por defecto**.
-RSA-SHA1 sigue disponible (`xades.SHA1`) por ser el algoritmo que nombra la norma; su aceptación por el SRI real no se ha probado con este SDK.
+RSA-SHA1 sigue disponible (`xades.SHA1`) por ser el algoritmo que nombra la norma; el SRI también lo autorizó en la misma fecha.
 La firma lleva las tres referencias del Anexo 14 (SignedProperties, KeyInfo y comprobante) y nunca se entrega sin pasar la verificación del propio SDK.
 
 ## D3. `X509IssuerName` con formato RFC 2253 al estilo Java
@@ -40,4 +40,4 @@ Tipos y campos siguen las etiquetas XML del SRI (`InfoTributaria`, `RazonSocial`
 
 ## Discrepancias abiertas
 - **Notas de crédito/débito:** el SRI publica dos familias de XSD incompatibles (una admite `agenteRetencion`/`contribuyenteRimpe`, la otra `valorDevolucionIva`). Pendiente de resolver al implementar esos comprobantes.
-- **Estados de autorización:** la ficha muestra `RECHAZADO` en un ejemplo y habla de «NO AUTORIZADO» en el texto. El cliente trata como no autorizado todo estado resuelto que no sea `AUTORIZADO`.
+- **Estados de autorización:** la ficha muestra `RECHAZADO` en un ejemplo; el servicio real responde `NO AUTORIZADO`. El cliente trata como no autorizado todo estado resuelto que no sea `AUTORIZADO`.

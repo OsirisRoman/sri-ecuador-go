@@ -71,8 +71,8 @@ const (
 	// real del 2026-11-14, docs/pruebas-sri.md).
 	SHA256 Algoritmo = iota
 	// SHA1 es RSA-SHA1, el algoritmo que nombra la ficha técnica (6.8) y
-	// que usa su Anexo 14. Se conserva por compatibilidad; SHA-1 está en
-	// desuso criptográfico.
+	// que usa su Anexo 14. El SRI también lo autoriza, pero SHA-1 está en
+	// desuso criptográfico: úselo solo si un receptor lo exige.
 	SHA1
 )
 

@@ -33,12 +33,39 @@ Observaciones:
 - El reenvío se resolvió sin intervención: `Reanudar` interpretó el 43 como «ya recibido» y obtuvo la autorización (decisión D8).
 - En la consulta de validez satisfactoria, `estadoConsulta` llega vacío.
 
-Qué **no** demuestra esta ronda:
+### Ronda 2 — 2026-11-14
 
-- **RSA-SHA1 no se envió al SRI.** Tras autorizarse SHA-256 no hizo falta; su aceptación real sigue sin probar con este SDK.
-- Un solo certificado (BCE) y un solo tipo de emisor. Certificados de otras entidades (Security Data, ANF, Uanataca…) pueden tener emisores con atributos distintos en `X509IssuerName`.
-- Solo factura 1.1.0 mínima: sin ICE, descuentos, crédito, exportación ni las versiones 1.0.0 / 2.x.
-- No se ha visto un `NO AUTORIZADO` real ni un comprobante en procesamiento prolongado.
+Mismas condiciones. Ejecutada con `go run ./internal/qa`. Todos los escenarios pasaron antes la validación local (reglas, XSD, firma verificada) y, en los autorizados, el SRI devolvió el comprobante idéntico byte a byte.
+
+| Escenario | Versión | Firma | Recepción | Autorización |
+|---|---|---|---|---|
+| Comprador con RUC; IVA 15 % con descuento y precio de 6 decimales + IVA 0 %; crédito a 30 días; `detAdicional`; info adicional con `ñ & " < > '` | 1.1.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
+| Comprador con cédula; IVA 15 % + IVA 5 %; dos formas de pago; `otrosRubrosTerceros` | 2.1.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
+| Mínima a consumidor final | 1.0.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
+| Mínima a consumidor final | 2.0.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
+| Líneas exenta (7), no objeto (6) y gravada; propina | 1.1.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
+| Mínima firmada con **RSA-SHA1** | 1.1.0 | SHA-1 | `RECIBIDA` | **`AUTORIZADO`** |
+| Contenido alterado después de firmar | 1.1.0 | SHA-256 | `RECIBIDA` | **`NO AUTORIZADO`**, error 39 «FIRMA INVALIDA» |
+| … y luego el original, con la misma clave de acceso (ficha 5.10) | 1.1.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
+| Elemento no permitido por el XSD | 1.1.0 | — | **`DEVUELTA`**, error 35 «ARCHIVO NO CUMPLE ESTRUCTURA XML» con el detalle `cvc-complex-type.2.4.a` | — |
+| … y luego el original, con la misma clave | 1.1.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
+
+Conclusiones:
+
+- El SRI autoriza **tanto RSA-SHA256 como RSA-SHA1**. El SDK usa SHA-256 por defecto (D2).
+- Las cuatro versiones del esquema de factura se autorizan.
+- El estado real de un comprobante no autorizado es el texto `NO AUTORIZADO` (la ficha muestra `RECHAZADO` en un ejemplo antiguo).
+- Una firma inválida **no** se detecta en recepción (`RECIBIDA`) sino al autorizar: confirma que RECIBIDA no implica AUTORIZADO.
+- Un comprobante devuelto o no autorizado puede reenviarse corregido con la misma clave de acceso y secuencial, como indica la ficha (5.10).
+- El cálculo de IVA sobre la base acumulada (D5) y el redondeo del SDK no produjeron el error 52.
+
+Qué **no** demuestran estas rondas:
+
+- Un solo certificado (Banco Central del Ecuador) y un solo emisor (persona natural). Certificados de otras entidades (Security Data, ANF, Uanataca…) pueden tener emisores con atributos distintos en `X509IssuerName`.
+- Sin ICE, IRBPNR, exportación, reembolsos, retenciones en factura, negociable ni sustitutiva de guía de remisión.
+- Sin la leyenda de negocio popular RIMPE (requiere un emisor de ese régimen).
+- No se ha observado un comprobante en procesamiento prolongado ni el error 70.
+- Solo el ambiente de pruebas, que puede validar menos que producción.
 
 ## Producción
 
