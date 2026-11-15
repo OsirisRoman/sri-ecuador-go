@@ -69,4 +69,4 @@ Requiere Docker (o Python 3 con `xlrd`) y Go.
 2. Actualizar los datos de la tabla anterior y las citas de versión en el código y la documentación.
 3. Descargar de nuevo los XSD, compararlos con `esquema/xsd/` y, si cambiaron, reemplazarlos y actualizar `PROCEDENCIA.md` (la prueba `TestProcedencia` falla hasta que coincidan).
 4. Revisar si los `esquema.Ajustes` siguen siendo necesarios (la prueba `TestRimpeNegocioPopular` avisa cuando el XSD publicado ya los incorpora).
-5. Repetir las rondas de `docs/pruebas-sri.md` en el ambiente de pruebas.
+5. Repetir las pruebas de `docs/pruebas-sri.md` en el ambiente de pruebas.

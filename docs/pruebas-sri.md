@@ -1,191 +1,88 @@
 # Pruebas de interoperabilidad
 
-Este documento registra **resultados reales**, con sus condiciones. Lo que no se ha probado se declara como tal.
+Este documento resume qué se ha comprobado y en qué condiciones. Lo que no se ha probado se declara como tal. Resultados al **15 de noviembre de 2026**, con la ficha técnica v2.34.
 
-## Verificación local independiente
+## Condiciones
+
+- **Ambiente:** certificación (pruebas) del SRI, `celcer.sri.gob.ec`. Nada se ha enviado a producción.
+- **Emisor:** una persona natural habilitada en el ambiente de pruebas.
+- **Certificado:** Banco Central del Ecuador, RSA 2048, con cadena de cuatro certificados en el `.p12`.
+- Los datos del emisor y las claves de acceso no se publican.
+
+Todos los comprobantes pasaron antes la validación local (reglas, XSD y verificación de la firma). En todos los autorizados, el comprobante que devuelve el SRI es **idéntico byte a byte** al enviado.
+
+## Comprobantes autorizados por el SRI
+
+| Comprobante | Versiones | Casos cubiertos |
+|---|---|---|
+| Factura | 1.0.0, 1.1.0, 2.0.0, 2.1.0 | Consumidor final, comprador con RUC y con cédula; IVA 15 %, 5 %, 0 %, exento y no objeto; descuento; precios y cantidades con 6 decimales; propina; crédito con plazo; varias formas de pago; rubros de terceros; detalles e información adicionales con `ñ & " < > '` |
+| Factura de exportación (Anexo 4) | 1.1.0 | Comprador con identificación del exterior, incoterms, flete y seguro |
+| Factura de reembolso de gastos (Anexo 5) | 1.1.0 | Un comprobante reembolsado con dos tarifas de IVA |
+| Nota de crédito | 1.1.0 | Total y parcial, creadas con `notacredito.DesdeFactura` |
+| Nota de débito | 1.0.0 | Dos motivos, IVA 15 %, una forma de pago |
+| Comprobante de retención | 2.0.0 | Un documento de sustento con retención de renta y de IVA, pago local |
+| Guía de remisión | 1.0.0, 1.1.0 | Con factura de sustento y sin ella (traslado entre establecimientos); dos detalles |
+| Liquidación de compra | 1.0.0, 1.1.0 | Proveedor con cédula; IVA 0 % y 15 %; descuento; unidad de medida |
+
+Firma: el SRI autoriza tanto **RSA-SHA256** (valor por defecto del SDK) como **RSA-SHA1**.
+
+## Servicios y manejo de respuestas
+
+| Qué | Resultado |
+|---|---|
+| Recepción y autorización individuales | Probadas con todos los comprobantes anteriores |
+| Consulta de autorización por clave de acceso | `AUTORIZADO`, con fecha |
+| Consulta de validez (`ConsultaComprobante`) | `estadoAutorizacion=AUTORIZADO` |
+| Reenvío de un comprobante ya autorizado | El SRI responde `DEVUELTA` con el código 43; el SDK lo reconoce y obtiene la autorización |
+| Comprobante alterado después de firmar | `RECIBIDA` y luego `NO AUTORIZADO`, código 39; el SDK lo reporta como no autorizado |
+| Comprobante que incumple el XSD (enviado sin la validación local) | `DEVUELTA`, código 35 |
+| Reenvío del comprobante correcto tras una devolución o un no autorizado | `AUTORIZADO` |
+| Envío por lotes (`ws.Lote`) | Lote `RECIBIDA`; cada comprobante se resuelve por separado: en un lote con una factura válida y otra alterada, la primera quedó `AUTORIZADO` y la segunda `NO AUTORIZADO` |
+
+## Comportamientos del SRI confirmados
+
+Conviene conocerlos porque condicionan cómo se integra el SDK:
+
+- **`RECIBIDA` no es autorización.** Una firma inválida no se detecta en la recepción sino al autorizar.
+- El número de autorización es la clave de acceso.
+- El estado de un comprobante rechazado en la autorización es el texto `NO AUTORIZADO`.
+- Un comprobante devuelto o no autorizado puede reenviarse corregido con la misma clave de acceso. Su secuencial también puede reutilizarse con una clave nueva.
+- El SRI contrasta el **porcentaje de cada retención** con el que tiene parametrizado para su código, y lo rechaza (código 52) si no coincide. El SDK incluye el catálogo de retenciones de renta y avisa antes de enviar; ese catálogo caduca (ver `actualizar-catalogos.md`).
+- Los **códigos de país** son los de la Tabla 25 de la ficha (Catálogo ATS), no los de ISO 3166; el SRI rechaza los que no figuran en ella (código 52). El SDK incluye la tabla y avisa.
+- El importe total de una factura de exportación incluye flete y seguro, como lo calcula el SDK.
+- **Lotes:** el documento `<lote>` no lleva firma propia; su clave de acceso se compone con tipo de comprobante 01 y una serie que el emisor reserva para lotes.
+- La firma del SDK usa el prefijo `ds:`; se acepta también en los comprobantes cuyo XSD declara la firma con `ns1:`.
+
+## Verificación independiente
 
 | Qué | Con qué | Resultado |
 |---|---|---|
-| Firma XAdES-BES RSA-SHA1 (3 referencias) | `xmlsec1` 1.3.6 (OpenSSL), Alpine 3.20 | `Verification status: OK` |
-| Firma XAdES-BES RSA-SHA256 | ídem | `Verification status: OK` |
-| Validador XSD frente a libxml2 | `xmllint --schema` sobre los 13 XML de ejemplo del SRI | 13/13 veredictos idénticos (12 válidos; `factura_V2.0.0.xml` inválido en ambos) |
-| Claves de acceso | Claves impresas en la ficha v2.34 (Anexo 1, Anexo 14, 8.2.3) | Todas verifican; `Generar` reproduce la del Anexo 14 |
+| Firma XAdES-BES, RSA-SHA256 y RSA-SHA1 | `xmlsec1` 1.3.6 | `Verification status: OK` |
+| Validador XSD | `xmllint --schema` sobre los 13 XML de ejemplo del SRI | 13 de 13 veredictos idénticos a los del SDK |
+| Claves de acceso | Las impresas en la ficha v2.34 | Todas verifican; el SDK reproduce la del Anexo 14 |
+| RIDE de los seis comprobantes | Dos visores independientes (poppler y MuPDF) y revisión visual | PDF válidos; contenido, tablas y totales correctos |
+| Código de barras del RIDE | Lector `zbar` sobre el PDF a 300 ppp | Code 128 legible en los seis; coincide con la clave de acceso |
 
-`xmlsec1` valida XMLDSig (digests y firma); no evalúa las propiedades XAdES.
-
-## Ambiente de certificación del SRI (`celcer.sri.gob.ec`)
-
-### Ronda 1 — 2026-11-14
-
-Condiciones: emisor persona natural habilitado en pruebas; certificado del Banco Central del Ecuador (RSA 2048, cadena de 4 certificados en el `.p12`); factura v1.1.0 a consumidor final, un detalle de USD 1,00 con IVA 15 %, pago en efectivo; SDK en la rama `feat/flujo-factura`. Los datos del emisor y las claves de acceso se omiten.
-
-| # | Operación | Validación local | Firma verificada | Recepción | Autorización |
-|---|---|---|---|---|---|
-| 1 | Factura firmada con **RSA-SHA256** | ✅ reglas y XSD | ✅ | `RECIBIDA` | **`AUTORIZADO`** |
-| 2 | Reenvío del mismo documento ya autorizado | — | — | `DEVUELTA`, error **43** «CLAVE ACCESO REGISTRADA» | sigue `AUTORIZADO` |
-| 3 | Consulta de autorización por clave | — | — | — | `AUTORIZADO`, con fecha |
-| 4 | Consulta de validez (`ConsultaComprobante`) | — | — | — | `estadoAutorizacion=AUTORIZADO`, `tipoComprobante=Factura` |
-
-Observaciones:
-
-- El comprobante que el SRI devuelve dentro de la autorización es **idéntico byte a byte** al enviado: la serialización canónica del SDK no es alterada por el SRI.
-- El número de autorización es la clave de acceso (ficha 5.9) y el ambiente devuelto es `PRUEBAS`.
-- El reenvío se resolvió sin intervención: `Reanudar` interpretó el 43 como «ya recibido» y obtuvo la autorización (decisión D8).
-- En la consulta de validez satisfactoria, `estadoConsulta` llega vacío.
-
-### Ronda 2 — 2026-11-14
-
-Mismas condiciones. Ejecutada con `go run ./internal/qa`. Todos los escenarios pasaron antes la validación local (reglas, XSD, firma verificada) y, en los autorizados, el SRI devolvió el comprobante idéntico byte a byte.
-
-| Escenario | Versión | Firma | Recepción | Autorización |
-|---|---|---|---|---|
-| Comprador con RUC; IVA 15 % con descuento y precio de 6 decimales + IVA 0 %; crédito a 30 días; `detAdicional`; info adicional con `ñ & " < > '` | 1.1.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
-| Comprador con cédula; IVA 15 % + IVA 5 %; dos formas de pago; `otrosRubrosTerceros` | 2.1.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
-| Mínima a consumidor final | 1.0.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
-| Mínima a consumidor final | 2.0.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
-| Líneas exenta (7), no objeto (6) y gravada; propina | 1.1.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
-| Mínima firmada con **RSA-SHA1** | 1.1.0 | SHA-1 | `RECIBIDA` | **`AUTORIZADO`** |
-| Contenido alterado después de firmar | 1.1.0 | SHA-256 | `RECIBIDA` | **`NO AUTORIZADO`**, error 39 «FIRMA INVALIDA» |
-| … y luego el original, con la misma clave de acceso (ficha 5.10) | 1.1.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
-| Elemento no permitido por el XSD | 1.1.0 | — | **`DEVUELTA`**, error 35 «ARCHIVO NO CUMPLE ESTRUCTURA XML» con el detalle `cvc-complex-type.2.4.a` | — |
-| … y luego el original, con la misma clave | 1.1.0 | SHA-256 | `RECIBIDA` | **`AUTORIZADO`** |
-
-Conclusiones:
-
-- El SRI autoriza **tanto RSA-SHA256 como RSA-SHA1**. El SDK usa SHA-256 por defecto (D2).
-- Las cuatro versiones del esquema de factura se autorizan.
-- El estado real de un comprobante no autorizado es el texto `NO AUTORIZADO` (la ficha muestra `RECHAZADO` en un ejemplo antiguo).
-- Una firma inválida **no** se detecta en recepción (`RECIBIDA`) sino al autorizar: confirma que RECIBIDA no implica AUTORIZADO.
-- Un comprobante devuelto o no autorizado puede reenviarse corregido con la misma clave de acceso y secuencial, como indica la ficha (5.10).
-- El cálculo de IVA sobre la base acumulada (D5) y el redondeo del SDK no produjeron el error 52.
-
-### Ronda 3 — 2026-11-15: nota de crédito
-
-Para cada caso se emitió primero una factura de sustento (v1.1.0, comprador con RUC, IVA 15 % y 0 %), que quedó autorizada, y después la nota de crédito construida con `notacredito.DesdeFactura`.
-
-| Escenario | Versión | Recepción | Autorización |
-|---|---|---|---|
-| Nota de crédito por el total de la factura | 1.1.0 | `RECIBIDA` | **`AUTORIZADO`** |
-| Nota de crédito parcial (una línea, cantidad menor) | 1.1.0 | `RECIBIDA` | **`AUTORIZADO`** |
-
-Se usó el XSD `NotaCredito_V1.1.0.xsd` (sin `valorDevolucionIva`). No se probó la versión 1.0.0 de la nota de crédito ni el campo de devolución de IVA.
-
-### Ronda 4 — 2026-11-15: nota de débito
-
-Factura de sustento autorizada (v1.1.0, USD 115,00) y, sobre ella, una nota de débito v1.0.0 con dos motivos (intereses y gastos de cobranza), IVA 15 % y una forma de pago.
-
-| Escenario | Versión | Recepción | Autorización |
-|---|---|---|---|
-| Nota de débito con dos motivos e IVA 15 % | 1.0.0 | `RECIBIDA` | **`AUTORIZADO`** |
-
-No se probó `valorDevolucionIva` (requiere el servicio DIG, Anexo 20).
-
-### Ronda 5 — 2026-11-15: comprobante de retención
-
-Comprobante de retención v2.0.0 (ATS) con un documento de sustento (factura de USD 200,00 más IVA 15 %), una retención de renta y una de IVA del 30 %, pago local.
-
-| Intento | Recepción | Autorización |
-|---|---|---|
-| Renta con código 312 al 1,75 % | `RECIBIDA` | **`NO AUTORIZADO`**, error 52 «ERROR EN DIFERENCIAS»: «La tarifa (1.75) no es igual al parametrizado (2.0) para el código de porcentaje 312» |
-| El mismo comprobante con el porcentaje corregido al 2 %, mismo secuencial y **nueva** clave de acceso | `RECIBIDA` | **`AUTORIZADO`** |
-
-Conclusiones:
-
-- El SRI contrasta el porcentaje de cada retención con su propia parametrización del código, que cambia con la normativa. A raíz de este rechazo el SDK incluye, además de la tabla de retención de IVA de la ficha (Tabla 20), el catálogo de retenciones de renta del ATS, que habría advertido de la discrepancia antes de enviar (ver `actualizar-catalogos.md`).
-- Un secuencial que quedó `NO AUTORIZADO` puede volver a usarse con otra clave de acceso.
-- El XSD de retención declara la firma con el prefijo `ns1:`; la firma del SDK (prefijo `ds:`, mismo espacio de nombres) es aceptada.
-
-No se probaron: retenciones de ISD, pagos al exterior, dividendos, compra de banano, reembolsos ni la versión 1.0.0.
-
-### Ronda 6 — 2026-11-15: guía de remisión
-
-| Comprobante | Recepción | Autorización |
-|---|---|---|
-| Factura de sustento (cantidad con 6 decimales) | `RECIBIDA` | `AUTORIZADO` |
-| Guía v1.1.0 con esa factura como sustento (número, clave de acceso y fecha), dos detalles, cantidad con 6 decimales, detalle adicional con `&` y `Ñ`, ruta | `RECIBIDA` | **`AUTORIZADO`** |
-| Guía v1.0.0 sin comprobante de sustento, traslado entre establecimientos (`codEstabDestino`) | `RECIBIDA` | **`AUTORIZADO`** |
-
-En ambas guías el transporte empieza el día de la emisión y termina al día siguiente, y la fecha de la clave de acceso es la de inicio del transporte. Los comprobantes devueltos son idénticos byte a byte a los enviados.
-
-No se probaron: varios destinatarios, documento aduanero, emisión anterior al día del traslado (`GenerarClaveAccesoEn`) ni el rechazo 82.
-
-### Ronda 7 — 2026-11-15: liquidación de compra
-
-| Comprobante | Recepción | Autorización |
-|---|---|---|
-| Liquidación v1.1.0: proveedor identificado con cédula, un bien con IVA 0 % (cantidad con 6 decimales, unidad de medida) y un servicio con IVA 15 % | `RECIBIDA` | **`AUTORIZADO`** |
-| Liquidación v1.0.0: un servicio con IVA 15 % y descuento | `RECIBIDA` | **`AUTORIZADO`** |
-
-Los comprobantes devueltos son idénticos byte a byte a los enviados.
-
-No se probaron: reembolsos (`codDocReembolso` 41), proveedores del exterior, liquidación negociable ni máquina fiscal.
-
-Con esta ronda, los seis tipos de comprobante del esquema offline han sido autorizados al menos una vez en el ambiente de pruebas.
-
-### Ronda 8 — 2026-11-15: factura de exportación y de reembolso
-
-| Comprobante | Recepción | Autorización |
-|---|---|---|
-| Factura de exportación (Anexo 4): comprador con identificación del exterior, IVA 0 %, incoterms, flete y seguro, con los países de destino y adquisición en código ISO 3166 (156) | `RECIBIDA` | **`NO AUTORIZADO`**, error 52: «El codigo de pais: 156 no existe para el campo paisDestino» |
-| La misma factura con el código de la Tabla 25 (331), mismo secuencial y nueva clave | `RECIBIDA` | **`AUTORIZADO`** |
-| Factura de reembolso de gastos (Anexo 5): `codDocReembolso` 41, un comprobante reembolsado (una factura autorizada en la ronda 2) con dos tarifas de IVA | `RECIBIDA` | **`AUTORIZADO`** |
-
-Conclusiones:
-
-- El SRI valida los códigos de país contra su propia tabla (Tabla 25, la del Catálogo ATS), que no coincide con ISO 3166. A raíz de este rechazo el SDK incluye la tabla y advierte de los códigos desconocidos antes de enviar.
-- El importe total de la factura de exportación incluye el flete y el seguro, como calcula el SDK.
-
-No se probaron contra el SRI: combustibles, transporte comercial, factura comercial negociable ni reembolsos en liquidación de compra (sus reglas solo tienen pruebas locales).
-
-### Ronda 9 — 2026-11-15: envío por lotes
-
-El lote es un documento `<lote>` sin firmar que envuelve comprobantes firmados (Tabla 8). Se envía por la misma operación `validarComprobante` y se consulta con `autorizacionComprobanteLote`.
-
-| Lote | Recepción | Consulta del lote |
-|---|---|---|
-| Dos facturas válidas | `RECIBIDA` | 2 autorizaciones: **`AUTORIZADO`** y **`AUTORIZADO`** (resueltas en menos de 4 segundos) |
-| Una factura válida y otra alterada después de firmarla | `RECIBIDA` | **`AUTORIZADO`** la primera; **`NO AUTORIZADO`**, error 39 «FIRMA INVALIDA», la segunda |
-
-Lo que la ficha no aclaraba y estas pruebas establecen:
-
-- La clave de acceso del lote se aceptó con tipo de comprobante 01 y una serie reservada para lotes (se usó 001-999), distinta de la de los comprobantes.
-- El lote no necesita firma propia.
-- La recepción acepta el lote entero y el resultado es **por comprobante**: uno defectuoso no arrastra a los demás.
-
-No se probó: lotes con otros tipos de comprobante o mezclados, el máximo de 50 comprobantes, la reutilización de una clave de lote ni un lote con un comprobante que incumple el XSD (el simulador responde 35 por comprobante, pero es una suposición no contrastada).
-
-Qué **no** demuestran estas rondas:
-
-- Un solo certificado (Banco Central del Ecuador) y un solo emisor (persona natural). Certificados de otras entidades (Security Data, ANF, Uanataca…) pueden tener emisores con atributos distintos en `X509IssuerName`.
-- Sin ICE, IRBPNR, retenciones en factura, negociable ni sustitutiva de guía de remisión.
-- Sin la leyenda de negocio popular RIMPE (requiere un emisor de ese régimen).
-- No se ha observado un comprobante en procesamiento prolongado ni el error 70.
-- Solo el ambiente de pruebas, que puede validar menos que producción.
-
-## RIDE
-
-Los RIDE no se envían al SRI; lo que sigue son comprobaciones locales sobre los comprobantes autorizados en las rondas anteriores (2026-11-15).
-
-| Qué | Con qué | Resultado |
-|---|---|---|
-| RIDE de factura, nota de crédito, nota de débito, retención, guía de remisión y liquidación de compra | `ride.Generar` sobre los XML autorizados | Seis PDF de una página |
-| El PDF es válido y se ve como se espera | Dos visores independientes: poppler (`pdfinfo`, `pdftoppm`) y MuPDF (`mutool`), más revisión visual | Sin errores; contenido, tablas y totales correctos |
-| El código de barras es legible | Lector zbar (`zbarimg`) sobre el PDF rasterizado a 300 ppp | Code 128 leído en los seis; coincide con la clave de acceso impresa |
-| Correo con RIDE adjunto | Mensaje compuesto sin enviar | Dos adjuntos: XML y PDF |
-
-No se ha impreso en papel ni se ha leído el código con un lector físico.
+`xmlsec1` valida XMLDSig (resúmenes y firma); no evalúa las propiedades XAdES.
 
 ## Correo
 
 | Qué | Con qué | Resultado |
 |---|---|---|
-| Envío con texto, HTML y XML adjunto | Mailpit (contenedor local, sin cifrado) | Entregado; cabeceras, cuerpo y adjunto correctos |
-| Entrega de una nota de crédito autorizada | Servidor SMTP real del propietario, puerto 587 con STARTTLS y autenticación (2026-11-15) | Mensaje aceptado por el servidor y **recibido en la bandeja de entrada** (Gmail), con el cuerpo y el XML adjunto correctos |
+| Envío con texto, HTML y adjuntos | Mailpit (contenedor local) | Entregado; cabeceras, cuerpo y adjuntos correctos |
+| Entrega de comprobantes autorizados con XML y RIDE adjuntos | Servidor SMTP real, puerto 587 con STARTTLS y autenticación | Recibidos en la bandeja de entrada (Gmail); el RIDE se abre correctamente, con logotipo y sin él |
 
-| Entrega de una factura autorizada con XML y RIDE adjuntos | El mismo servidor SMTP real (2026-11-15) | Mensaje aceptado por el servidor y **recibido** (confirmado por el propietario), primero sin logotipo y después con el logotipo en el RIDE |
+Que un servidor acepte el mensaje no garantiza la llegada a la bandeja de entrada: depende de la reputación del remitente (SPF, DKIM, DMARC), ajena al SDK.
 
-Que un servidor acepte el mensaje no garantiza la llegada a la bandeja de entrada: eso depende de la reputación del remitente (SPF, DKIM, DMARC), ajena al SDK.
+## Lo que no se ha probado
 
-## Producción
-
-No se envía ni se enviará nada a producción desde este proyecto.
+- **Producción.** El ambiente de pruebas puede validar menos que producción.
+- **Otros certificados y emisores.** Solo un certificado (Banco Central del Ecuador) y un emisor (persona natural). Los certificados de otras entidades pueden tener emisores con atributos distintos en `X509IssuerName`.
+- **Factura:** ICE, IRBPNR, retenciones informativas, comercial negociable, sustitutiva de guía de remisión, combustibles y transporte comercial (sus reglas solo tienen pruebas locales). Tampoco la leyenda de negocio popular RIMPE, que requiere un emisor de ese régimen.
+- **Nota de crédito:** versión 1.0.0 y `valorDevolucionIva`. **Nota de débito:** `valorDevolucionIva`.
+- **Retención:** versión 1.0.0, ISD, pagos al exterior, dividendos, compra de banano y reembolsos.
+- **Guía de remisión:** varios destinatarios, documento aduanero y emisión anterior al día del traslado.
+- **Liquidación de compra:** reembolsos, proveedores del exterior y liquidación negociable.
+- **Lotes:** otros tipos de comprobante o mezclados, el máximo de 50, y un comprobante que incumpla el XSD dentro de un lote (el simulador responde con el código 35 por comprobante; es una suposición).
+- Un comprobante en procesamiento prolongado y el código 70.
+- **RIDE:** impresión en papel y lectura del código con un lector físico.

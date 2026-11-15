@@ -22,7 +22,7 @@ No es un SDK teórico: cada pieza se comprobó enviando comprobantes reales al *
 | Guía de remisión v1.0.0 y 1.1.0 | **AUTORIZADO** |
 | Liquidación de compra v1.0.0 y 1.1.0 | **AUTORIZADO** |
 | Envío por lotes | Recibido; resultado por comprobante |
-| Rechazos provocados a propósito (firma alterada, XML fuera de esquema, reenvíos) | El SRI respondió con los códigos previstos (39, 35, 43) y el SDK los manejó |
+| Manejo de respuestas (reenvío de un comprobante ya autorizado, firma alterada, XML fuera de esquema) | El SDK interpreta correctamente los códigos del SRI (43, 39, 35) |
 
 Además:
 
@@ -30,9 +30,9 @@ Además:
 - Las firmas se verificaron también con una herramienta independiente (`xmlsec1`) y la validación XSD se contrastó con `xmllint`.
 - Los RIDE en PDF se abrieron con dos visores independientes y su código de barras se leyó con un lector (`zbar`).
 - El correo de entrega, con XML y RIDE adjuntos, llegó a la bandeja de entrada por un servidor SMTP real.
-- Dos rechazos reales del SRI durante las pruebas (un porcentaje de retención desactualizado y un código de país que no era de su tabla) se convirtieron en validaciones del SDK.
+- El SDK avisa antes de enviar de dos causas habituales de rechazo: un porcentaje de retención distinto del que el SRI tiene parametrizado y un código de país que no es de su tabla.
 
-El detalle de cada ronda, con lo que **no** se ha probado (por ejemplo, certificados de otras entidades emisoras, ICE o el ambiente de producción), está en [docs/pruebas-sri.md](docs/pruebas-sri.md). El repositorio no contiene certificados, contraseñas ni datos del emisor con el que se hicieron las pruebas. Desde este proyecto no se ha enviado nada a producción.
+El detalle, con lo que **no** se ha probado (por ejemplo, certificados de otras entidades emisoras, ICE o el ambiente de producción), está en [docs/pruebas-sri.md](docs/pruebas-sri.md). El repositorio no contiene certificados, contraseñas ni datos del emisor con el que se hicieron las pruebas. Desde este proyecto no se ha enviado nada a producción.
 
 La ficha técnica cambia: antes de adoptar el SDK compruebe en <https://www.sri.gob.ec/facturacion-electronica> si existe una versión posterior a la 2.34 y revise [docs/actualizar-catalogos.md](docs/actualizar-catalogos.md).
 
