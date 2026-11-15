@@ -26,6 +26,7 @@ import (
 	"github.com/OsirisRoman/sri-ecuador-go/factura"
 	"github.com/OsirisRoman/sri-ecuador-go/guiaremision"
 	"github.com/OsirisRoman/sri-ecuador-go/internal/entorno"
+	"github.com/OsirisRoman/sri-ecuador-go/liquidacion"
 	"github.com/OsirisRoman/sri-ecuador-go/notacredito"
 	"github.com/OsirisRoman/sri-ecuador-go/notadebito"
 	"github.com/OsirisRoman/sri-ecuador-go/retencion"
@@ -147,6 +148,7 @@ func main() {
 	ndDesde := flag.Int("nd-desde", 0, "secuencial de nota de débito; activa el escenario de nota de débito")
 	ncDesde := flag.Int("nc-desde", 0, "primer secuencial de nota de crédito; activa los escenarios de nota de crédito")
 	guiaDesde := flag.Int("guia-desde", 0, "primer secuencial de guía de remisión; activa los escenarios de guía (usa 2)")
+	liqDesde := flag.Int("liq-desde", 0, "primer secuencial de liquidación de compra; activa los escenarios de liquidación (usa 2)")
 	dir := flag.String("dir", "evidencia-privada", "directorio de evidencias (excluido de Git)")
 	flag.Parse()
 	if *desde < 1 {
@@ -177,7 +179,7 @@ func main() {
 		if *solo != "" && !strings.Contains(","+*solo+",", ","+e.nombre+",") {
 			continue
 		}
-		if *solo == "" && (*ncDesde > 0 || *ndDesde > 0 || *retDesde > 0 || *guiaDesde > 0) {
+		if *solo == "" && (*ncDesde > 0 || *ndDesde > 0 || *retDesde > 0 || *guiaDesde > 0 || *liqDesde > 0) {
 			continue // con -nc-desde o -nd-desde y sin -solo no se repiten las facturas
 		}
 		decir("\n== %s (secuencial %d, %s)\n   %s", e.nombre, sec, e.algoritmo, e.descripcion)
@@ -488,6 +490,65 @@ func main() {
 				continue
 			}
 			base := filepath.Join(ronda, fmt.Sprintf("guia-%d", *guiaDesde+i))
+			os.WriteFile(base+".firmado.xml", prep.XMLFirmado, 0o600)
+			if !enviar(cli, prep.XMLFirmado, base, decir) {
+				fallos++
+			}
+		}
+	}
+	if *liqDesde > 0 {
+		decir("\n== liquidacion-compra (liquidaciones %d y %d)", *liqDesde, *liqDesde+1)
+		for i, ver := range []string{liquidacion.V110, liquidacion.V100} {
+			it, err := entorno.Emisor(comprobante.CodLiquidacionCompra, *liqDesde+i)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+			l := &liquidacion.LiquidacionCompra{
+				Version:        ver,
+				InfoTributaria: it,
+				InfoLiquidacionCompra: liquidacion.InfoLiquidacionCompra{
+					FechaEmision:         comprobante.Hoy(),
+					ObligadoContabilidad: entorno.Valor("SRI_EMISOR_OBLIGADO_CONTABILIDAD", "NO"),
+					// Proveedor: la cédula del propio emisor, con la razón
+					// social de pruebas de la ficha (sección 5.6).
+					TipoIdentificacionProveedor: comprobante.IDCedula,
+					RazonSocialProveedor:        razonPruebas,
+					IdentificacionProveedor:     it.RUC[:10],
+					DireccionProveedor:          "Vía a la Costa km 12",
+					Pagos:                       []comprobante.Pago{{FormaPago: comprobante.PagoSinSistemaFinanciero}},
+				},
+				InfoAdicional: []comprobante.CampoAdicional{{Nombre: "Observación", Valor: "Liquidación de prueba"}},
+			}
+			descripcion := "proveedor con cédula, bien con IVA 0 % (6 decimales) y servicio con IVA 15 %"
+			if ver == liquidacion.V110 {
+				l.Detalles = []liquidacion.Detalle{
+					liquidacion.LineaIVA("CACAO", "Cacao en grano", d("12.345678"), d("3.25"), comprobante.IVA0),
+					liquidacion.LineaIVA("FLETE", "Servicio de acarreo", d("1"), d("20.00"), comprobante.IVA15),
+				}
+				l.Detalles[0].UnidadMedida = "quintal"
+			} else {
+				descripcion = "un servicio con IVA 15 % y descuento"
+				l.Detalles = []liquidacion.Detalle{liquidacion.LineaIVA("SRV", "Servicio ocasional", d("2"), d("15.50"), comprobante.IVA15)}
+				l.Detalles[0].Descuento = d("1.00")
+			}
+			l.Calcular()
+			l.GenerarClaveAcceso("")
+			decir("   -- liquidación %d, v%s: %s; importe %s", *liqDesde+i, ver, descripcion, l.InfoLiquidacionCompra.ImporteTotal)
+			cli, err := sri.Nuevo(sri.Config{Ambiente: comprobante.Pruebas, Certificado: cert, RUC: it.RUC})
+			if err != nil {
+				panic(err)
+			}
+			prep, err := cli.Preparar(l)
+			if err != nil {
+				decir("   ERROR local en la liquidación: %v", err)
+				fallos++
+				continue
+			}
+			for _, h := range prep.Advertencias {
+				decir("   advertencia local: %s", h)
+			}
+			base := filepath.Join(ronda, fmt.Sprintf("liq-%d", *liqDesde+i))
 			os.WriteFile(base+".firmado.xml", prep.XMLFirmado, 0o600)
 			if !enviar(cli, prep.XMLFirmado, base, decir) {
 				fallos++

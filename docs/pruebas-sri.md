@@ -109,6 +109,19 @@ En ambas guías el transporte empieza el día de la emisión y termina al día s
 
 No se probaron: varios destinatarios, documento aduanero, emisión anterior al día del traslado (`GenerarClaveAccesoEn`) ni el rechazo 82.
 
+### Ronda 7 — 2026-11-15: liquidación de compra
+
+| Comprobante | Recepción | Autorización |
+|---|---|---|
+| Liquidación v1.1.0: proveedor identificado con cédula, un bien con IVA 0 % (cantidad con 6 decimales, unidad de medida) y un servicio con IVA 15 % | `RECIBIDA` | **`AUTORIZADO`** |
+| Liquidación v1.0.0: un servicio con IVA 15 % y descuento | `RECIBIDA` | **`AUTORIZADO`** |
+
+Los comprobantes devueltos son idénticos byte a byte a los enviados.
+
+No se probaron: reembolsos (`codDocReembolso` 41), proveedores del exterior, liquidación negociable ni máquina fiscal.
+
+Con esta ronda, los seis tipos de comprobante del esquema offline han sido autorizados al menos una vez en el ambiente de pruebas.
+
 Qué **no** demuestran estas rondas:
 
 - Un solo certificado (Banco Central del Ecuador) y un solo emisor (persona natural). Certificados de otras entidades (Security Data, ANF, Uanataca…) pueden tener emisores con atributos distintos en `X509IssuerName`.
