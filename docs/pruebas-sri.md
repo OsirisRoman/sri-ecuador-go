@@ -91,7 +91,7 @@ Comprobante de retención v2.0.0 (ATS) con un documento de sustento (factura de 
 
 Conclusiones:
 
-- El SRI contrasta el porcentaje de cada retención con su propia parametrización del código, que cambia con la normativa. El SDK incluye la tabla de retención de IVA de la ficha (Tabla 20), pero **no** los porcentajes de renta, que pertenecen al catálogo del ATS: un porcentaje desactualizado solo se descubre al autorizar.
+- El SRI contrasta el porcentaje de cada retención con su propia parametrización del código, que cambia con la normativa. A raíz de este rechazo el SDK incluye, además de la tabla de retención de IVA de la ficha (Tabla 20), el catálogo de retenciones de renta del ATS, que habría advertido de la discrepancia antes de enviar (ver `actualizar-catalogos.md`).
 - Un secuencial que quedó `NO AUTORIZADO` puede volver a usarse con otra clave de acceso.
 - El XSD de retención declara la firma con el prefijo `ns1:`; la firma del SDK (prefijo `ds:`, mismo espacio de nombres) es aceptada.
 

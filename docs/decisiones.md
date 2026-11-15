@@ -38,6 +38,9 @@ Tipos y campos siguen las etiquetas XML del SRI (`InfoTributaria`, `RazonSocial`
 ## D11. `comprobante.Lista[T]`
 `encoding/xml` escribe `<pagos></pagos>` para un slice vacío con `pagos>pago,omitempty`, y el XSD lo rechaza. `Lista[T]` es un slice normal cuya serialización omite el contenedor vacío.
 
+## D12. Catálogo de retenciones de renta: incluido, generado y no bloqueante
+El SRI rechazó con el error 52 una retención con el código 312 al 1,75 % porque su parametrización vigente es 2 %. Para detectar esto antes de enviar se incluye la tabla 3.10 del Catálogo ATS, generada desde el archivo oficial con `scripts/catalogo-ats/` (no transcrita a mano) y con su procedencia en constantes. Como la tabla cambia varias veces al año, las discrepancias son **advertencias** salvo que se pida el modo estricto, y no se contrastan comprobantes anteriores a su vigencia. El mantenimiento está descrito en `docs/actualizar-catalogos.md`.
+
 ## Discrepancias abiertas
 - **Nota de crédito y `valorDevolucionIva`:** el SRI publica dos XSD de nota de crédito incompatibles: `NotaCredito_V*` admite `agenteRetencion`/`contribuyenteRimpe` pero no `valorDevolucionIva`; `NOTA_CREDITO-*` hace lo contrario. El SDK usa el primero, con el que el SRI autorizó las pruebas. Falta determinar cómo se emite una nota de crédito con devolución de IVA. (El XSD de nota de débito `NotaDebito_V1.0.0` sí admite ambos.)
 - **Estados de autorización:** la ficha muestra `RECHAZADO` en un ejemplo; el servicio real responde `NO AUTORIZADO`. El cliente trata como no autorizado todo estado resuelto que no sea `AUTORIZADO`.

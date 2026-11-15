@@ -47,7 +47,7 @@ func base(t *testing.T, fecha comprobante.Fecha) *retencion.ComprobanteRetencion
 				{CodImpuestoDocSustento: comprobante.ImpuestoIVA, CodigoPorcentaje: comprobante.IVA15, BaseImponible: d("200.00")},
 			},
 			Retenciones: []retencion.Retencion{
-				{Codigo: retencion.ImpuestoRenta, CodigoRetencion: "312", BaseImponible: d("200.00"), PorcentajeRetener: d("1.75")},
+				{Codigo: retencion.ImpuestoRenta, CodigoRetencion: "312", BaseImponible: d("200.00"), PorcentajeRetener: d("2")},
 				{Codigo: retencion.ImpuestoIVA, CodigoRetencion: "1", BaseImponible: d("30.00"), PorcentajeRetener: d("30")},
 			},
 			Pagos: []retencion.Pago{{FormaPago: comprobante.PagoOtrosSistFinanciero}},
@@ -67,10 +67,10 @@ func validar(c *retencion.ComprobanteRetencion) comprobante.Hallazgos {
 func TestCalcularValidarYXSD(t *testing.T) {
 	c := base(t, hoy)
 	ds := c.DocsSustento[0]
-	if ds.ImporteTotal.String() != "230.00" || ds.Retenciones[0].ValorRetenido.String() != "3.50" || ds.Retenciones[1].ValorRetenido.String() != "9.00" {
+	if ds.ImporteTotal.String() != "230.00" || ds.Retenciones[0].ValorRetenido.String() != "4.00" || ds.Retenciones[1].ValorRetenido.String() != "9.00" {
 		t.Errorf("importes = %s %s %s", ds.ImporteTotal, ds.Retenciones[0].ValorRetenido, ds.Retenciones[1].ValorRetenido)
 	}
-	if c.TotalRetenido().String() != "12.50" || c.InfoCompRetencion.PeriodoFiscal != "11/2026" || ds.Pagos[0].Total.String() != "230.00" {
+	if c.TotalRetenido().String() != "13.00" || c.InfoCompRetencion.PeriodoFiscal != "11/2026" || ds.Pagos[0].Total.String() != "230.00" {
 		t.Errorf("total retenido = %s, período = %s", c.TotalRetenido(), c.InfoCompRetencion.PeriodoFiscal)
 	}
 	if c.InfoTributaria.ClaveAcceso[8:10] != "07" {
@@ -138,7 +138,7 @@ func TestReglas(t *testing.T) {
 		{"número con guiones", func(c *retencion.ComprobanteRetencion) { c.DocsSustento[0].NumDocSustento = "001-001-000000123" }, "formato", false},
 		{"valor retenido", func(c *retencion.ComprobanteRetencion) { c.DocsSustento[0].Retenciones[0].ValorRetenido = d("9.99") }, "retencion.valor", false},
 		{"porcentaje con 4 dígitos", func(c *retencion.ComprobanteRetencion) {
-			c.DocsSustento[0].Retenciones[0].PorcentajeRetener = d("1.750")
+			c.DocsSustento[0].Retenciones[0].PorcentajeRetener = d("2.000")
 		}, "digitos", false},
 		{"tarifa 15.00", func(c *retencion.ComprobanteRetencion) { c.DocsSustento[0].ImpuestosDocSustento[0].Tarifa = d("15.00") }, "digitos", false},
 		{"porcentaje de IVA", func(c *retencion.ComprobanteRetencion) {
@@ -189,5 +189,59 @@ func TestEmitirContraElSimulador(t *testing.T) {
 	}
 	if !res.Autorizado() {
 		t.Fatalf("estado = %s %v", res.Estado, res.Mensajes)
+	}
+}
+
+// El catálogo de renta reproduce el rechazo real del SRI: el código 312 al
+// 1,75 % fue devuelto con el error 52 porque el parametrizado es 2 %.
+func TestCatalogoRenta(t *testing.T) {
+	c312, ok := retencion.BuscarConceptoRenta("312")
+	if !ok || !c312.Admite(d("2")) || !c312.Admite(d("2.00")) || c312.Admite(d("1.75")) {
+		t.Fatalf("312 = %+v", c312)
+	}
+	if c, ok := retencion.BuscarConceptoRenta("323 M"); !ok || c.Codigo != "323M" {
+		t.Errorf("los espacios del código deben ignorarse: %+v", c)
+	}
+	if c, _ := retencion.BuscarConceptoRenta("517"); !c.Admite(d("12.5")) || c.Admite(d("38")) {
+		t.Errorf("rango 0 al 37: %+v", c)
+	}
+	if c, _ := retencion.BuscarConceptoRenta("346"); c.Comprobable() || !c.Admite(d("7")) {
+		t.Errorf("«varios porcentajes» no es comprobable: %+v", c)
+	}
+	if n := len(retencion.ConceptosRenta()); n < 100 {
+		t.Errorf("catálogo con %d conceptos", n)
+	}
+	if len(retencion.CatalogoRentaVigencia) != 10 || len(retencion.CatalogoRentaSHA256) != 64 {
+		t.Error("falta la procedencia del catálogo")
+	}
+
+	con := func(codigo, pct string) *retencion.ComprobanteRetencion {
+		c := base(t, hoy)
+		c.DocsSustento[0].Retenciones[0].CodigoRetencion = codigo
+		c.DocsSustento[0].Retenciones[0].PorcentajeRetener = d(pct)
+		c.Calcular()
+		return c
+	}
+	// Por defecto, advertencia: no impide emitir.
+	hs := validar(con("312", "1.75"))
+	if !hs.Tiene("retencion.porcentaje-renta") || hs.Err() != nil {
+		t.Errorf("porcentaje desactualizado: %v", hs)
+	}
+	if hs := validar(con("999", "1")); !hs.Tiene("retencion.codigo-renta") || hs.Err() != nil {
+		t.Errorf("código desconocido: %v", hs)
+	}
+	// En modo estricto, error.
+	estricto := con("312", "1.75").ValidarCon(retencion.OpcionesValidacion{Hoy: hoy, CatalogoRentaEstricto: true})
+	if estricto.Err() == nil {
+		t.Error("en modo estricto debe ser un error")
+	}
+	// Un comprobante anterior a la vigencia del catálogo no se contrasta.
+	antiguo := con("312", "1.75")
+	antiguo.InfoCompRetencion.FechaEmision = comprobante.NuevaFecha(2026, 3, 15)
+	antiguo.InfoCompRetencion.PeriodoFiscal = "03/2026"
+	antiguo.DocsSustento[0].FechaEmisionDocSustento = comprobante.NuevaFecha(2026, 3, 10)
+	antiguo.GenerarClaveAcceso("12345678")
+	if hs := validar(antiguo); hs.Tiene("retencion.porcentaje-renta") {
+		t.Errorf("no debe contrastarse una fecha anterior a la vigencia: %v", hs)
 	}
 }

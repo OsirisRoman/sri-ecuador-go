@@ -38,9 +38,8 @@ const (
 // técnica v2.34): código de retención → porcentaje. Los códigos 7 y 8
 // corresponden a "retención en cero" y "no procede retención".
 //
-// Los porcentajes de retención de renta e ISD no se incluyen: dependen del
-// catálogo del ATS y de la normativa vigente en cada fecha, y el SRI los
-// contrasta al autorizar (error 52 si no coinciden con su parametrización).
+// Los porcentajes de retención de renta están en ConceptosRenta, tomados del
+// Catálogo ATS; los de ISD no se incluyen.
 var PorcentajesIVA = map[string]decimal.Decimal{
 	"9":  decimal.Entero(10),
 	"10": decimal.Entero(20),
@@ -319,6 +318,11 @@ var (
 type OpcionesValidacion struct {
 	// Hoy es la fecha de referencia; por defecto, la actual en Ecuador.
 	Hoy comprobante.Fecha
+	// CatalogoRentaEstricto convierte en errores las discrepancias con el
+	// catálogo de retenciones de renta incluido (código desconocido o
+	// porcentaje no admitido), que por defecto son advertencias porque el
+	// catálogo puede estar desactualizado. Ver ConceptoRenta.
+	CatalogoRentaEstricto bool
 }
 
 // Validar aplica las reglas que se pueden comprobar sin consultar al SRI y
@@ -468,6 +472,20 @@ func (c *ComprobanteRetencion) ValidarCon(op OpcionesValidacion) comprobante.Hal
 				v.Errorf(r+"codigo", "catalogo", "debe ser 1 (renta), 2 (IVA) o 6 (ISD) (Tabla 19)")
 			}
 			v.Texto(r+"codigoRetencion", ret.CodigoRetencion, true, 5)
+			if ret.Codigo == ImpuestoRenta && !info.FechaEmision.EsCero() && info.FechaEmision.Time().Format("2006-01-02") >= CatalogoRentaVigencia {
+				reportar := v.Advertirf
+				if op.CatalogoRentaEstricto {
+					reportar = v.Errorf
+				}
+				const nota = "según el Catálogo ATS vigente desde %s (descargado el %s; puede estar desactualizado, ver docs/actualizar-catalogos.md)"
+				if cr, ok := BuscarConceptoRenta(ret.CodigoRetencion); !ok {
+					reportar(r+"codigoRetencion", "retencion.codigo-renta", "el código %q no figura entre los conceptos de retención de renta "+nota,
+						ret.CodigoRetencion, CatalogoRentaVigencia, CatalogoRentaDescarga)
+				} else if !cr.Admite(ret.PorcentajeRetener) {
+					reportar(r+"porcentajeRetener", "retencion.porcentaje-renta", "el código %s (%s) admite %s %% y se declaró %s, "+nota+"; el SRI rechaza con el error 52 un porcentaje distinto del parametrizado",
+						cr.Codigo, cr.Concepto, cr.Texto, ret.PorcentajeRetener, CatalogoRentaVigencia, CatalogoRentaDescarga)
+				}
+			}
 			if ret.Codigo == ImpuestoIVA {
 				if pct, ok := PorcentajesIVA[ret.CodigoRetencion]; !ok {
 					v.Errorf(r+"codigoRetencion", "catalogo", "código de retención de IVA %q desconocido (Tabla 20)", ret.CodigoRetencion)
