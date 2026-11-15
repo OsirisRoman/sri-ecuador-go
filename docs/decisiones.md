@@ -39,5 +39,5 @@ Tipos y campos siguen las etiquetas XML del SRI (`InfoTributaria`, `RazonSocial`
 `encoding/xml` escribe `<pagos></pagos>` para un slice vacío con `pagos>pago,omitempty`, y el XSD lo rechaza. `Lista[T]` es un slice normal cuya serialización omite el contenedor vacío.
 
 ## Discrepancias abiertas
-- **Notas de crédito/débito:** el SRI publica dos familias de XSD incompatibles (una admite `agenteRetencion`/`contribuyenteRimpe`, la otra `valorDevolucionIva`). Pendiente de resolver al implementar esos comprobantes.
+- **Nota de crédito y `valorDevolucionIva`:** el SRI publica dos XSD de nota de crédito incompatibles: `NotaCredito_V*` admite `agenteRetencion`/`contribuyenteRimpe` pero no `valorDevolucionIva`; `NOTA_CREDITO-*` hace lo contrario. El SDK usa el primero, con el que el SRI autorizó las pruebas. Falta determinar cómo se emite una nota de crédito con devolución de IVA. (El XSD de nota de débito `NotaDebito_V1.0.0` sí admite ambos.)
 - **Estados de autorización:** la ficha muestra `RECHAZADO` en un ejemplo; el servicio real responde `NO AUTORIZADO`. El cliente trata como no autorizado todo estado resuelto que no sea `AUTORIZADO`.

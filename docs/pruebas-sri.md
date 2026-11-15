@@ -59,6 +59,44 @@ Conclusiones:
 - Un comprobante devuelto o no autorizado puede reenviarse corregido con la misma clave de acceso y secuencial, como indica la ficha (5.10).
 - El cálculo de IVA sobre la base acumulada (D5) y el redondeo del SDK no produjeron el error 52.
 
+### Ronda 3 — 2026-11-15: nota de crédito
+
+Para cada caso se emitió primero una factura de sustento (v1.1.0, comprador con RUC, IVA 15 % y 0 %), que quedó autorizada, y después la nota de crédito construida con `notacredito.DesdeFactura`.
+
+| Escenario | Versión | Recepción | Autorización |
+|---|---|---|---|
+| Nota de crédito por el total de la factura | 1.1.0 | `RECIBIDA` | **`AUTORIZADO`** |
+| Nota de crédito parcial (una línea, cantidad menor) | 1.1.0 | `RECIBIDA` | **`AUTORIZADO`** |
+
+Se usó el XSD `NotaCredito_V1.1.0.xsd` (sin `valorDevolucionIva`). No se probó la versión 1.0.0 de la nota de crédito ni el campo de devolución de IVA.
+
+### Ronda 4 — 2026-11-15: nota de débito
+
+Factura de sustento autorizada (v1.1.0, USD 115,00) y, sobre ella, una nota de débito v1.0.0 con dos motivos (intereses y gastos de cobranza), IVA 15 % y una forma de pago.
+
+| Escenario | Versión | Recepción | Autorización |
+|---|---|---|---|
+| Nota de débito con dos motivos e IVA 15 % | 1.0.0 | `RECIBIDA` | **`AUTORIZADO`** |
+
+No se probó `valorDevolucionIva` (requiere el servicio DIG, Anexo 20).
+
+### Ronda 5 — 2026-11-15: comprobante de retención
+
+Comprobante de retención v2.0.0 (ATS) con un documento de sustento (factura de USD 200,00 más IVA 15 %), una retención de renta y una de IVA del 30 %, pago local.
+
+| Intento | Recepción | Autorización |
+|---|---|---|
+| Renta con código 312 al 1,75 % | `RECIBIDA` | **`NO AUTORIZADO`**, error 52 «ERROR EN DIFERENCIAS»: «La tarifa (1.75) no es igual al parametrizado (2.0) para el código de porcentaje 312» |
+| El mismo comprobante con el porcentaje corregido al 2 %, mismo secuencial y **nueva** clave de acceso | `RECIBIDA` | **`AUTORIZADO`** |
+
+Conclusiones:
+
+- El SRI contrasta el porcentaje de cada retención con su propia parametrización del código, que cambia con la normativa. El SDK incluye la tabla de retención de IVA de la ficha (Tabla 20), pero **no** los porcentajes de renta, que pertenecen al catálogo del ATS: un porcentaje desactualizado solo se descubre al autorizar.
+- Un secuencial que quedó `NO AUTORIZADO` puede volver a usarse con otra clave de acceso.
+- El XSD de retención declara la firma con el prefijo `ns1:`; la firma del SDK (prefijo `ds:`, mismo espacio de nombres) es aceptada.
+
+No se probaron: retenciones de ISD, pagos al exterior, dividendos, compra de banano, reembolsos ni la versión 1.0.0.
+
 Qué **no** demuestran estas rondas:
 
 - Un solo certificado (Banco Central del Ecuador) y un solo emisor (persona natural). Certificados de otras entidades (Security Data, ANF, Uanataca…) pueden tener emisores con atributos distintos en `X509IssuerName`.
@@ -66,6 +104,15 @@ Qué **no** demuestran estas rondas:
 - Sin la leyenda de negocio popular RIMPE (requiere un emisor de ese régimen).
 - No se ha observado un comprobante en procesamiento prolongado ni el error 70.
 - Solo el ambiente de pruebas, que puede validar menos que producción.
+
+## Correo
+
+| Qué | Con qué | Resultado |
+|---|---|---|
+| Envío con texto, HTML y XML adjunto | Mailpit (contenedor local, sin cifrado) | Entregado; cabeceras, cuerpo y adjunto correctos |
+| Entrega de una nota de crédito autorizada | Servidor SMTP real del propietario, puerto 587 con STARTTLS y autenticación (2026-11-15) | Mensaje aceptado por el servidor y **recibido en la bandeja de entrada** (Gmail), con el cuerpo y el XML adjunto correctos |
+
+Que un servidor acepte el mensaje no garantiza la llegada a la bandeja de entrada: eso depende de la reputación del remitente (SPF, DKIM, DMARC), ajena al SDK.
 
 ## Producción
 
