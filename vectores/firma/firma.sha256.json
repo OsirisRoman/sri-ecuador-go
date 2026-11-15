@@ -1,0 +1,15 @@
+{
+  "nota": "Datos intermedios de factura.firmada.sha256.xml. El certificado es desechable y lo emite una autoridad ficticia.",
+  "algoritmo": "RSA-SHA256",
+  "signingTime": "2026-11-14T10:00:00-05:00",
+  "emisorDelCertificadoDERHex": "3081a2310b300906035504061302454331263024060355040a131d454e54494441442044452050525545424120532e412e2c20474f5352493130302e060355040b1327454e54494441442044452043455254494649434143494f4e20444520494e464f524d4143494f4e311b30190603550403131241432044452050525545424120474f535249311c301a0603550461131356415445432d31373930303030303030303031",
+  "x509IssuerName": "2.5.4.97=#131356415445432d31373930303030303030303031,CN=AC DE PRUEBA GOSRI,OU=ENTIDAD DE CERTIFICACION DE INFORMACION,O=ENTIDAD DE PRUEBA S.A.\\, GOSRI,C=EC",
+  "x509SerialNumber": "1312833444",
+  "digestComprobante": "jkK72YbK8vJD6t9fpzbQHIShSF8W62+SBQhYQN8k3Rc=",
+  "digestSignedProperties": "+F2xTINY3zvBGhNThLtpFhiondO/38/1rX0VOkNqibQ=",
+  "digestKeyInfo": "4Di7WvGJcRvUy79XUsHprpHzRWBdFoBIPIJg7LfFBXQ=",
+  "c14nComprobante": "c14n-comprobante.xml",
+  "c14nSignedProperties": "c14n-signedproperties.xml",
+  "c14nKeyInfo": "c14n-keyinfo.xml",
+  "c14nSignedInfo": "c14n-signedinfo.xml"
+}

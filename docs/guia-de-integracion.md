@@ -99,7 +99,8 @@ Antes de enviar, `Preparar` puede devolver `*sri.ErrorValidacion`: el comprobant
 8. **Los textos no llevan saltos de línea ni espacios al inicio o al final.** El SDK lo valida; limpie los datos de entrada.
 9. **El ambiente es explícito.** `comprobante.Pruebas` y `comprobante.Produccion` van en `Config.Ambiente` y en `InfoTributaria.Ambiente`, y deben coincidir; si no, el cliente devuelve `sri.ErrAmbiente`. Use configuración distinta por entorno y no comparta secuenciales entre ambientes.
 10. **El RIDE se genera solo de comprobantes autorizados**: pase a `ride.Generar` el resultado de `res.XMLAutorizado()`.
-11. **Secretos fuera del código.** La contraseña del `.p12` y las credenciales SMTP vienen del entorno o de un gestor de secretos; el `.p12` no se sube al repositorio. El SDK no escribe la clave privada en registros.
+11. **No use `valorDevolucionIva`.** La devolución automática de IVA no está implementada: el SDK rechaza un valor mayor que cero porque no lo descuenta del importe total.
+12. **Secretos fuera del código.** La contraseña del `.p12` y las credenciales SMTP vienen del entorno o de un gestor de secretos; el `.p12` no se sube al repositorio. El SDK no escribe la clave privada en registros.
 
 ## 7. Qué guardar por cada comprobante
 
@@ -149,7 +150,7 @@ Receptores: notas de crédito y débito, retenciones y liquidaciones exigen iden
 
 ## 10. Pruebas
 
-- **Pruebas automáticas de su aplicación:** use `sritest.Nuevo()`, un SRI simulado en memoria que valida XSD y firma. `Servidor.FallarProximas(503)` inyecta fallos de red y `ConsultasEnProceso` simula demoras de autorización. Vea `example_test.go`.
+- **Pruebas automáticas de su aplicación:** use `sritest.Nuevo()`, un SRI simulado en memoria que valida XSD y firma, con `sritest.CertificadoDePrueba()`, un certificado desechable. `Servidor.FallarProximas(503)` inyecta fallos de red y `ConsultasEnProceso` simula demoras de autorización. Vea `example_test.go`.
 - **Ambiente de pruebas del SRI:** `comprobante.Pruebas`. Los comprobantes no tienen validez pero consumen secuenciales de pruebas. Como receptor de pruebas la ficha técnica sugiere la razón social `PRUEBAS SERVICIO DE RENTAS INTERNAS`.
 - **Antes de pasar a producción:** emita en pruebas al menos un comprobante de cada tipo que vaya a usar, incluido un rechazo, y compruebe que su aplicación reanuda bien tras un corte de red.
 
@@ -184,4 +185,4 @@ El SDK incluye copias de catálogos del SRI (porcentajes de retención, tarifas 
 - [ ] Ambiente y certificado por configuración, sin secretos en el repositorio.
 - [ ] Pruebas automáticas con `sritest` y una ronda en el ambiente de pruebas del SRI.
 
-Más contexto: [`capacidades.md`](capacidades.md) (qué está implementado y con qué límites), [`pruebas-sri.md`](pruebas-sri.md) (qué se ha comprobado contra el SRI real) y [`decisiones.md`](decisiones.md) (por qué el SDK es como es).
+Más contexto: [`capacidades.md`](capacidades.md) (qué está implementado y con qué límites), [`pruebas-sri.md`](pruebas-sri.md) (qué se ha comprobado contra el SRI real), [`pendientes.md`](pendientes.md) (qué falta) y [`referencia/`](referencia/README.md) (cómo funciona el protocolo). El índice completo está en [`README.md`](README.md).

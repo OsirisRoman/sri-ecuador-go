@@ -65,7 +65,7 @@ func ejecutar() error {
 			ObligadoContabilidad:        "NO",
 			TipoIdentificacionComprador: comprobante.IDCedula,
 			RazonSocialComprador:        "PRUEBAS SERVICIO DE RENTAS INTERNAS",
-			IdentificacionComprador:     "1710034065",
+			IdentificacionComprador:     "1700000001",
 			Pagos:                       []comprobante.Pago{{FormaPago: comprobante.PagoSinSistemaFinanciero}},
 		},
 		Detalles: []factura.Detalle{
