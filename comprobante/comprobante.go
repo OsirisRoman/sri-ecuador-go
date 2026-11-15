@@ -184,6 +184,9 @@ type TotalImpuesto struct {
 	BaseImponible      decimal.Decimal  `xml:"baseImponible"`
 	Tarifa             *decimal.Decimal `xml:"tarifa,omitempty"`
 	Valor              decimal.Decimal  `xml:"valor"`
+	// ValorDevolucionIva solo puede omitirse o ser cero: los validadores
+	// rechazan un valor positivo porque el SDK no implementa la devolución
+	// automática del IVA (ver Validador.DevolucionIVA).
 	ValorDevolucionIva *decimal.Decimal `xml:"valorDevolucionIva,omitempty"`
 }
 

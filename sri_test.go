@@ -9,6 +9,7 @@ import (
 
 	sri "github.com/OsirisRoman/sri-ecuador-go"
 	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
+	"github.com/OsirisRoman/sri-ecuador-go/decimal"
 	"github.com/OsirisRoman/sri-ecuador-go/esquema"
 	"github.com/OsirisRoman/sri-ecuador-go/internal/certprueba"
 	"github.com/OsirisRoman/sri-ecuador-go/internal/ejemplo"
@@ -228,5 +229,25 @@ func TestSinCertificado(t *testing.T) {
 	}
 	if _, err := c.Preparar(ejemplo.Factura(comprobante.Hoy(), "000000010")); !errors.Is(err, sri.ErrSinCertificado) {
 		t.Errorf("%v", err)
+	}
+}
+
+// El flujo público no firma ni envía un comprobante con devolución de IVA.
+func TestPrepararRechazaDevolucionIVA(t *testing.T) {
+	cert, err := sritest.CertificadoDePrueba()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := sri.Nuevo(sri.Config{Ambiente: comprobante.Pruebas, Certificado: cert})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := ejemplo.Factura(comprobante.Hoy(), "000000001")
+	valor := decimal.MustParse("0.50")
+	f.InfoFactura.TotalConImpuestos[0].ValorDevolucionIva = &valor
+	res, err := c.Preparar(f)
+	var ev *sri.ErrorValidacion
+	if !errors.As(err, &ev) || !ev.Hallazgos.Tiene("devolucion-iva.no-admitida") || res != nil && len(res.XMLFirmado) > 0 {
+		t.Fatalf("Preparar debía rechazarlo sin firmar: %v", err)
 	}
 }

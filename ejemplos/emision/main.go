@@ -25,7 +25,6 @@ import (
 	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
 	"github.com/OsirisRoman/sri-ecuador-go/factura"
-	"github.com/OsirisRoman/sri-ecuador-go/internal/certprueba"
 	"github.com/OsirisRoman/sri-ecuador-go/ride"
 	"github.com/OsirisRoman/sri-ecuador-go/sritest"
 	"github.com/OsirisRoman/sri-ecuador-go/ws"
@@ -169,14 +168,14 @@ func nuevoCliente() (cliente *sri.Cliente, ruc string, cerrar func(), err error)
 		cliente, err = sri.Nuevo(sri.Config{Ambiente: comprobante.Pruebas, Certificado: cert, RUC: ruc})
 		return cliente, ruc, func() {}, err
 	}
-	material, err := certprueba.Obtener() // solo para este ejemplo y para pruebas
+	cert, err := sritest.CertificadoDePrueba() // certificado desechable, solo para pruebas
 	if err != nil {
 		return nil, "", nil, err
 	}
 	simulador := sritest.Nuevo()
 	cliente, err = sri.Nuevo(sri.Config{
 		Ambiente:    comprobante.Pruebas,
-		Certificado: material.Certificado,
+		Certificado: cert,
 		Servicios:   ws.Nuevo(comprobante.Pruebas, ws.ConEndpoints(simulador.Endpoints())),
 		Espera:      sri.Espera{Inicial: time.Millisecond, Intervalo: time.Millisecond, Consultas: 5},
 	})
