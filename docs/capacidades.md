@@ -17,13 +17,13 @@ Leyenda: ✅ implementado y probado · 🚧 parcial · ⏳ pendiente.
 | SOAP recepción y autorización | ✅ | Probado con el SRI real (pruebas), con las respuestas de la ficha y con el simulador |
 | SOAP consulta de validez | ✅ | Probado con el SRI real para un comprobante autorizado |
 | SOAP envío por lotes | ✅ | `ws.Lote`, `ValidarLote`, `AutorizacionLote`. Probado con el SRI real (pruebas): resultado por comprobante. El flujo de alto nivel `sri.Cliente` sigue siendo por comprobante |
-| SOAP factura comercial negociable | ⏳ | |
+| SOAP consulta de factura comercial negociable | ✅ | `ws.ConsultarNegociable`. Probado con el SRI real para una factura no negociable; sin una factura confirmada como negociable |
 | Reintentos e idempotencia | ✅ | |
 | Simulador del SRI (`sritest`) | ✅ | |
 | **Interoperabilidad con el SRI real** | 🚧 | Los seis tipos de comprobante **autorizados** en el ambiente de pruebas (SHA-256 y SHA-1, certificado BCE), más exportación, reembolso y lotes. Un solo certificado y un solo emisor; nada en producción. Alcance y límites en `pruebas-sri.md` |
 | Nota de crédito v1.0.0 / 1.1.0 | ✅ | Modelo, totales, validación y `DesdeFactura`. Total y parcial **autorizadas** en el ambiente de pruebas (1.1.0). Sin `valorDevolucionIva` (Anexo 20) |
 | Nota de débito v1.0.0 | ✅ | Modelo, totales y validación. **Autorizada** en el ambiente de pruebas. Admite `valorDevolucionIva`, sin probar |
-| Comprobante de retención v2.0.0 (ATS) | ✅ | Modelo completo, cálculo y validación; tablas de retención de IVA y de renta (Catálogo ATS, 127 conceptos; **caduca**, ver `actualizar-catalogos.md`). **Autorizado** en el ambiente de pruebas. La v1.0.0 no se modela |
+| Comprobante de retención v2.0.0 (ATS) y v1.0.0 | ✅ | Modelo, cálculo y validación; tablas de retención de IVA y de renta (Catálogo ATS, 127 conceptos; **caduca**, ver `actualizar-catalogos.md`). Ambas versiones **autorizadas** en el ambiente de pruebas. La 1.0.0 es `retencion.ComprobanteV1` |
 | Guía de remisión v1.0.0 / 1.1.0 | ✅ | Modelo, clave de acceso (fecha de emisión distinta del inicio del transporte), validación. **Autorizada** en el ambiente de pruebas |
 | Liquidación de compra v1.0.0 / 1.1.0 | ✅ | Modelo, totales (incluidos los de reembolso) y validación; **autorizada** en el ambiente de pruebas. Reembolsos sin probar contra el SRI |
 | RIDE (representación impresa, PDF) | ✅ | Los seis comprobantes, según los modelos del Anexo 2. Generador propio sin dependencias; código de barras Code 128 verificado con un lector (zbar); logotipo PNG/JPEG (se recortan sus márgenes en blanco y los grandes se reducen; sin logotipo se reserva el espacio con «NO TIENE LOGO», como hace el SRI); paginación; bordes redondeados. Sin fuentes incrustadas ni PDF/A; caracteres fuera de Windows-1252 se sustituyen |

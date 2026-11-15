@@ -20,7 +20,7 @@ Todos los comprobantes pasaron antes la validación local (reglas, XSD y verific
 | Factura de reembolso de gastos (Anexo 5) | 1.1.0 | Un comprobante reembolsado con dos tarifas de IVA |
 | Nota de crédito | 1.1.0 | Total y parcial, creadas con `notacredito.DesdeFactura` |
 | Nota de débito | 1.0.0 | Dos motivos, IVA 15 %, una forma de pago |
-| Comprobante de retención | 2.0.0 | Un documento de sustento con retención de renta y de IVA, pago local |
+| Comprobante de retención | 1.0.0, 2.0.0 | Retención de renta y de IVA sobre una factura; en la 2.0.0, un documento de sustento con pago local |
 | Guía de remisión | 1.0.0, 1.1.0 | Con factura de sustento y sin ella (traslado entre establecimientos); dos detalles |
 | Liquidación de compra | 1.0.0, 1.1.0 | Proveedor con cédula; IVA 0 % y 15 %; descuento; unidad de medida |
 
@@ -33,6 +33,7 @@ Firma: el SRI autoriza tanto **RSA-SHA256** (valor por defecto del SDK) como **R
 | Recepción y autorización individuales | Probadas con todos los comprobantes anteriores |
 | Consulta de autorización por clave de acceso | `AUTORIZADO`, con fecha |
 | Consulta de validez (`ConsultaComprobante`) | `estadoAutorizacion=AUTORIZADO` |
+| Consulta de factura comercial negociable (`ConsultaFactura`) | El servicio responde y el SDK interpreta la respuesta; para una factura no negociable, `RECHAZADA` con el código 99 |
 | Reenvío de un comprobante ya autorizado | El SRI responde `DEVUELTA` con el código 43; el SDK lo reconoce y obtiene la autorización |
 | Comprobante alterado después de firmar | `RECIBIDA` y luego `NO AUTORIZADO`, código 39; el SDK lo reporta como no autorizado |
 | Comprobante que incumple el XSD (enviado sin la validación local) | `DEVUELTA`, código 35 |
@@ -78,9 +79,9 @@ Que un servidor acepte el mensaje no garantiza la llegada a la bandeja de entrad
 
 - **Producción.** El ambiente de pruebas puede validar menos que producción.
 - **Otros certificados y emisores.** Solo un certificado (Banco Central del Ecuador) y un emisor (persona natural). Los certificados de otras entidades pueden tener emisores con atributos distintos en `X509IssuerName`.
-- **Factura:** ICE, IRBPNR, retenciones informativas, comercial negociable, sustitutiva de guía de remisión, combustibles y transporte comercial (sus reglas solo tienen pruebas locales). Tampoco la leyenda de negocio popular RIMPE, que requiere un emisor de ese régimen.
+- **Factura:** ICE, IRBPNR, retenciones informativas, una factura confirmada como comercial negociable, sustitutiva de guía de remisión, combustibles y transporte comercial (sus reglas solo tienen pruebas locales). Tampoco la leyenda de negocio popular RIMPE, que requiere un emisor de ese régimen.
 - **Nota de crédito:** versión 1.0.0 y `valorDevolucionIva`. **Nota de débito:** `valorDevolucionIva`.
-- **Retención:** versión 1.0.0, ISD, pagos al exterior, dividendos, compra de banano y reembolsos.
+- **Retención:** ISD, pagos al exterior, dividendos, compra de banano y reembolsos.
 - **Guía de remisión:** varios destinatarios, documento aduanero y emisión anterior al día del traslado.
 - **Liquidación de compra:** reembolsos, proveedores del exterior y liquidación negociable.
 - **Lotes:** otros tipos de comprobante o mezclados, el máximo de 50, y un comprobante que incumpla el XSD dentro de un lote (el simulador responde con el código 35 por comprobante; es una suposición).

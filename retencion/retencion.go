@@ -466,39 +466,7 @@ func (c *ComprobanteRetencion) ValidarCon(op OpcionesValidacion) comprobante.Hal
 		}
 		for j, ret := range d.Retenciones {
 			r := fmt.Sprintf("%sretenciones[%d].", q, j)
-			switch ret.Codigo {
-			case ImpuestoRenta, ImpuestoIVA, ImpuestoISD:
-			default:
-				v.Errorf(r+"codigo", "catalogo", "debe ser 1 (renta), 2 (IVA) o 6 (ISD) (Tabla 19)")
-			}
-			v.Texto(r+"codigoRetencion", ret.CodigoRetencion, true, 5)
-			if ret.Codigo == ImpuestoRenta && !info.FechaEmision.EsCero() && info.FechaEmision.Time().Format("2006-01-02") >= CatalogoRentaVigencia {
-				reportar := v.Advertirf
-				if op.CatalogoRentaEstricto {
-					reportar = v.Errorf
-				}
-				const nota = "según el Catálogo ATS vigente desde %s (descargado el %s; puede estar desactualizado, ver docs/actualizar-catalogos.md)"
-				if cr, ok := BuscarConceptoRenta(ret.CodigoRetencion); !ok {
-					reportar(r+"codigoRetencion", "retencion.codigo-renta", "el código %q no figura entre los conceptos de retención de renta "+nota,
-						ret.CodigoRetencion, CatalogoRentaVigencia, CatalogoRentaDescarga)
-				} else if !cr.Admite(ret.PorcentajeRetener) {
-					reportar(r+"porcentajeRetener", "retencion.porcentaje-renta", "el código %s (%s) admite %s %% y se declaró %s, "+nota+"; el SRI rechaza con el error 52 un porcentaje distinto del parametrizado",
-						cr.Codigo, cr.Concepto, cr.Texto, ret.PorcentajeRetener, CatalogoRentaVigencia, CatalogoRentaDescarga)
-				}
-			}
-			if ret.Codigo == ImpuestoIVA {
-				if pct, ok := PorcentajesIVA[ret.CodigoRetencion]; !ok {
-					v.Errorf(r+"codigoRetencion", "catalogo", "código de retención de IVA %q desconocido (Tabla 20)", ret.CodigoRetencion)
-				} else if !ret.PorcentajeRetener.Igual(pct) {
-					v.Errorf(r+"porcentajeRetener", "retencion.porcentaje", "el código %s de retención de IVA corresponde al %s %%; se declaró %s", ret.CodigoRetencion, pct, ret.PorcentajeRetener)
-				}
-			}
-			v.Numero(r+"baseImponible", ret.BaseImponible, 14, 2)
-			v.Numero(r+"porcentajeRetener", ret.PorcentajeRetener, 3, 2)
-			v.Numero(r+"valorRetenido", ret.ValorRetenido, 14, 2)
-			if calc := ret.BaseImponible.Porcentaje(ret.PorcentajeRetener).Redondear(2); ret.ValorRetenido.Restar(calc).Abs().Cmp(tolerancia) > 0 {
-				v.Errorf(r+"valorRetenido", "retencion.valor", "es %s pero base × porcentaje = %s", ret.ValorRetenido, calc)
-			}
+			validarRetencion(v, r, ret.Codigo, ret.CodigoRetencion, ret.BaseImponible, ret.PorcentajeRetener, ret.ValorRetenido, info.FechaEmision, op)
 			if dv := ret.Dividendos; dv != nil {
 				if dv.FechaPagoDiv.EsCero() {
 					v.Errorf(r+"dividendos.fechaPagoDiv", "requerido", "es obligatoria")
@@ -547,4 +515,44 @@ func (c *ComprobanteRetencion) ValidarCon(op OpcionesValidacion) comprobante.Hal
 		v.Texto("maquinaFiscal.serie", m.Serie, true, 30)
 	}
 	return v.Hallazgos()
+}
+
+// validarRetencion aplica las reglas de una línea de retención, comunes a
+// las versiones 1.0.0 y 2.0.0: tipo de impuesto (Tabla 19), código y
+// porcentaje (Tabla 20 para el IVA; Catálogo ATS para la renta) y valor
+// retenido. r es la ruta de la línea terminada en punto.
+func validarRetencion(v *comprobante.Validador, r, codigo, codigoRetencion string, base, porcentaje, valor decimal.Decimal, emision comprobante.Fecha, op OpcionesValidacion) {
+	switch codigo {
+	case ImpuestoRenta, ImpuestoIVA, ImpuestoISD:
+	default:
+		v.Errorf(r+"codigo", "catalogo", "debe ser 1 (renta), 2 (IVA) o 6 (ISD) (Tabla 19)")
+	}
+	v.Texto(r+"codigoRetencion", codigoRetencion, true, 5)
+	if codigo == ImpuestoRenta && !emision.EsCero() && emision.Time().Format("2006-01-02") >= CatalogoRentaVigencia {
+		reportar := v.Advertirf
+		if op.CatalogoRentaEstricto {
+			reportar = v.Errorf
+		}
+		const nota = "según el Catálogo ATS vigente desde %s (descargado el %s; puede estar desactualizado, ver docs/actualizar-catalogos.md)"
+		if cr, ok := BuscarConceptoRenta(codigoRetencion); !ok {
+			reportar(r+"codigoRetencion", "retencion.codigo-renta", "el código %q no figura entre los conceptos de retención de renta "+nota,
+				codigoRetencion, CatalogoRentaVigencia, CatalogoRentaDescarga)
+		} else if !cr.Admite(porcentaje) {
+			reportar(r+"porcentajeRetener", "retencion.porcentaje-renta", "el código %s (%s) admite %s %% y se declaró %s, "+nota+"; el SRI rechaza con el error 52 un porcentaje distinto del parametrizado",
+				cr.Codigo, cr.Concepto, cr.Texto, porcentaje, CatalogoRentaVigencia, CatalogoRentaDescarga)
+		}
+	}
+	if codigo == ImpuestoIVA {
+		if pct, ok := PorcentajesIVA[codigoRetencion]; !ok {
+			v.Errorf(r+"codigoRetencion", "catalogo", "código de retención de IVA %q desconocido (Tabla 20)", codigoRetencion)
+		} else if !porcentaje.Igual(pct) {
+			v.Errorf(r+"porcentajeRetener", "retencion.porcentaje", "el código %s de retención de IVA corresponde al %s %%; se declaró %s", codigoRetencion, pct, porcentaje)
+		}
+	}
+	v.Numero(r+"baseImponible", base, 14, 2)
+	v.Numero(r+"porcentajeRetener", porcentaje, 3, 2)
+	v.Numero(r+"valorRetenido", valor, 14, 2)
+	if calc := base.Porcentaje(porcentaje).Redondear(2); valor.Restar(calc).Abs().Cmp(tolerancia) > 0 {
+		v.Errorf(r+"valorRetenido", "retencion.valor", "es %s pero base × porcentaje = %s", valor, calc)
+	}
 }
