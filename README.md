@@ -37,7 +37,7 @@ Si este proyecto ayuda a un estudiante a aprender, a un desarrollador a superar 
 
 ## 📌 Estado del proyecto
 
-**Funcional y probado contra el SRI; versión previa a la 1.0.** Los seis tipos de comprobante del esquema offline han sido **autorizados por el ambiente de pruebas del SRI** con documentos generados y firmados por este SDK. La API todavía puede cambiar antes de la versión 1.0.
+**Funcional y probado contra el SRI; versión previa a la 1.0** (última publicada: [v0.1.0](https://github.com/OsirisRoman/sri-ecuador-go/releases/tag/v0.1.0), pre-release). Los seis tipos de comprobante del esquema offline han sido **autorizados por el ambiente de pruebas del SRI** con documentos generados y firmados por este SDK. La API todavía puede cambiar antes de la versión 1.0.
 
 - 🧩 Go puro, **sin cgo**, sin Java, sin Node.js, sin base de datos. Tres dependencias (XSD, PKCS#12 y `x/crypto`).
 - 📄 Basado en la *Ficha técnica de comprobantes electrónicos esquema offline* **v2.34** (julio 2026), la versión vigente publicada por el SRI al 15 de noviembre de 2026, y en los XSD oficiales, que van incrustados.
@@ -81,10 +81,10 @@ La lista completa, con lo que falta para cerrar cada punto, está en [docs/pendi
 ## 🚀 Instalación
 
 ```sh
-go get github.com/OsirisRoman/sri-ecuador-go
+go get github.com/OsirisRoman/sri-ecuador-go@v0.1.0
 ```
 
-Requiere Go 1.26 o superior. Para verlo funcionar sin configurar nada (usa un simulador del SRI y un certificado desechable):
+Requiere Go 1.26 o superior. Las versiones siguen la [política de versiones](docs/versionado.md); mientras sean 0.x, fije la versión y lea las [notas](CHANGELOG.md) antes de actualizar. Para verlo funcionar sin configurar nada (usa un simulador del SRI y un certificado desechable):
 
 ```sh
 git clone https://github.com/OsirisRoman/sri-ecuador-go && cd sri-ecuador-go

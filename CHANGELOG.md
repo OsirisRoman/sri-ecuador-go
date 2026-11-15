@@ -1,8 +1,12 @@
 # Notas de versión
 
-Los cambios notables de cada versión. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y las versiones, [SemVer](https://semver.org/lang/es/). Mientras la versión sea 0.x, la API puede cambiar entre versiones menores.
+Los cambios notables de cada versión. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y las versiones, [SemVer](https://semver.org/lang/es/), según la [política de versiones](docs/versionado.md). Mientras la versión sea 0.x, la API puede cambiar entre versiones menores.
 
-## v0.1.0 — primera versión pública (pre-release)
+## Sin publicar
+
+- Documentación: política de versiones (`docs/versionado.md`).
+
+## v0.1.0 — primera versión pública (pre-release) — 2026-11-15
 
 Primera versión utilizable del SDK. Es una versión previa a la 1.0: funciona y está probada contra el ambiente de pruebas del SRI, pero la API puede cambiar y hay casos sin verificar, que se declaran abajo.
 
