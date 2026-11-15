@@ -13,13 +13,7 @@ import (
 // técnica v2.34, sección 9.10).
 var LimiteConsumidorFinal = decimal.Entero(50)
 
-var (
-	reGuia          = regexp.MustCompile(`^[0-9]{3}-[0-9]{3}-[0-9]{9}$`)
-	reContribEsp    = regexp.MustCompile(`^[A-Za-z0-9]{3,13}$`)
-	reFormaPagoXSD  = regexp.MustCompile(`^(0[1-9]|1[0-9]|2[01])$`)
-	maxInfoAdic     = 15
-	maxDetAdicional = 3
-)
+var reGuia = regexp.MustCompile(`^[0-9]{3}-[0-9]{3}-[0-9]{9}$`)
 
 // OpcionesValidacion ajusta Validar.
 type OpcionesValidacion struct {
@@ -78,15 +72,7 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 	v.ClaveAcceso(f.InfoTributaria, info.FechaEmision)
 
 	// --- Emisor --------------------------------------------------------------
-	v.Texto("infoFactura.dirEstablecimiento", info.DirEstablecimiento, false, 300)
-	if info.ContribuyenteEspecial != "" && !reContribEsp.MatchString(info.ContribuyenteEspecial) {
-		v.Errorf("infoFactura.contribuyenteEspecial", "formato", "debe tener de 3 a 13 caracteres alfanuméricos")
-	}
-	switch info.ObligadoContabilidad {
-	case "", "SI", "NO":
-	default:
-		v.Errorf("infoFactura.obligadoContabilidad", "catalogo", `debe ser "SI" o "NO"`)
-	}
+	v.Emisor("infoFactura.", info.DirEstablecimiento, info.ContribuyenteEspecial, info.ObligadoContabilidad)
 
 	// --- Comprador -----------------------------------------------------------
 	v.Identificacion("infoFactura.tipoIdentificacionComprador", "infoFactura.identificacionComprador",
@@ -111,39 +97,7 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 	if len(f.Detalles) == 0 {
 		v.Errorf("detalles", "requerido", "la factura debe tener al menos un detalle")
 	}
-	sumaLineas, sumaDesc := decimal.Cero, decimal.Cero
-	for i, d := range f.Detalles {
-		p := fmt.Sprintf("detalles[%d].", i)
-		v.Texto(p+"descripcion", d.Descripcion, true, 300)
-		v.Texto(p+"codigoPrincipal", d.CodigoPrincipal, false, 25)
-		v.Texto(p+"codigoAuxiliar", d.CodigoAuxiliar, false, 25)
-		if d.CodigoPrincipal == "" {
-			v.Advertirf(p+"codigoPrincipal", "requerido", "la ficha técnica lo marca como obligatorio aunque el XSD lo admite vacío")
-		}
-		v.Numero(p+"cantidad", d.Cantidad, 18, decimalesCantidad)
-		v.Numero(p+"precioUnitario", d.PrecioUnitario, 18, decimalesCantidad)
-		v.Numero(p+"descuento", d.Descuento, 14, 2)
-		v.Numero(p+"precioTotalSinImpuesto", d.PrecioTotalSinImpuesto, 14, 2)
-		if esperado := totalLinea(d); !d.PrecioTotalSinImpuesto.Igual(esperado) {
-			v.Errorf(p+"precioTotalSinImpuesto", "detalle.total",
-				"es %s pero cantidad × precioUnitario − descuento = %s", d.PrecioTotalSinImpuesto, esperado)
-		}
-		if len(d.DetallesAdicionales) > maxDetAdicional {
-			v.Errorf(p+"detallesAdicionales", "maximo", "se admiten hasta %d detalles adicionales, hay %d", maxDetAdicional, len(d.DetallesAdicionales))
-		}
-		for j, da := range d.DetallesAdicionales {
-			v.Texto(fmt.Sprintf("%sdetallesAdicionales[%d].nombre", p, j), da.Nombre, true, 300)
-			v.Texto(fmt.Sprintf("%sdetallesAdicionales[%d].valor", p, j), da.Valor, true, 300)
-		}
-		if len(d.Impuestos) == 0 {
-			v.Errorf(p+"impuestos", "requerido", "cada detalle debe declarar al menos un impuesto (use IVA 0%%, no objeto o exento si no grava)")
-		}
-		for j, imp := range d.Impuestos {
-			v.ImpuestoLinea(fmt.Sprintf("%simpuestos[%d].", p, j), imp)
-		}
-		sumaLineas = sumaLineas.Sumar(d.PrecioTotalSinImpuesto)
-		sumaDesc = sumaDesc.Sumar(d.Descuento)
-	}
+	sumaLineas, sumaDesc := ValidarDetalles(v, f.Detalles, decimalesCantidad)
 
 	// --- Totales -------------------------------------------------------------
 	v.Numero("infoFactura.totalSinImpuestos", info.TotalSinImpuestos, 14, 2)
@@ -164,51 +118,53 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 			"es %s pero totalSinImpuestos + impuestos + propina y demás rubros = %s", info.ImporteTotal, esperado)
 	}
 
-	// --- Pagos ---------------------------------------------------------------
-	if len(info.Pagos) == 0 {
-		v.Errorf("infoFactura.pagos", "requerido", "debe indicar al menos una forma de pago (Tabla 24)")
-	}
-	sumaPagos := decimal.Cero
-	for i, pg := range info.Pagos {
-		p := fmt.Sprintf("infoFactura.pagos[%d].", i)
-		switch _, enTabla := comprobante.FormasPago[pg.FormaPago]; {
-		case !reFormaPagoXSD.MatchString(pg.FormaPago):
-			v.Errorf(p+"formaPago", "catalogo", "código %q inválido (Tabla 24)", pg.FormaPago)
-		case !enTabla:
-			v.Advertirf(p+"formaPago", "catalogo", "el código %q no figura entre las formas de pago vigentes de la Tabla 24", pg.FormaPago)
-		}
-		v.Numero(p+"total", pg.Total, 14, 2)
-		v.Texto(p+"unidadTiempo", pg.UnidadTiempo, false, 10)
-		sumaPagos = sumaPagos.Sumar(pg.Total)
-	}
-	if len(info.Pagos) > 0 && !sumaPagos.Igual(info.ImporteTotal) {
-		v.Advertirf("infoFactura.pagos", "pagos.suma", "los pagos suman %s y el importe total es %s", sumaPagos.Redondear(2), info.ImporteTotal)
-	}
-
-	// --- Información adicional ----------------------------------------------
-	if len(f.InfoAdicional) > maxInfoAdic {
-		v.Errorf("infoAdicional", "maximo", "se admiten hasta %d campos adicionales, hay %d (sección 9.11)", maxInfoAdic, len(f.InfoAdicional))
-	}
-	for i, c := range f.InfoAdicional {
-		v.Texto(fmt.Sprintf("infoAdicional[%d].nombre", i), c.Nombre, true, 300)
-		v.Texto(fmt.Sprintf("infoAdicional[%d].valor", i), c.Valor, true, 300)
-		if c.Nombre == comprobante.NombreRUCProveedor {
-			if err := comprobante.ValidarRUC(c.Valor); err != nil {
-				v.Errorf(fmt.Sprintf("infoAdicional[%d].valor", i), "ruc.formato", "el campo %q debe contener el RUC del proveedor (Anexo 26): %v", c.Nombre, err)
-			}
-		}
-	}
+	// --- Pagos e información adicional ------------------------------------
+	v.Pagos("infoFactura.pagos", info.Pagos, info.ImporteTotal, true)
+	v.Adicionales(f.InfoAdicional, f.MaquinaFiscal)
 	if f.TipoNegociable != nil {
 		v.Texto("tipoNegociable.correo", f.TipoNegociable.Correo, true, 100)
-	}
-	if m := f.MaquinaFiscal; m != nil {
-		v.Texto("maquinaFiscal.marca", m.Marca, true, 30)
-		v.Texto("maquinaFiscal.modelo", m.Modelo, true, 30)
-		v.Texto("maquinaFiscal.serie", m.Serie, true, 30)
 	}
 	for i, r := range f.OtrosRubrosTerceros {
 		v.Texto(fmt.Sprintf("otrosRubrosTerceros[%d].concepto", i), r.Concepto, true, 300)
 		v.Numero(fmt.Sprintf("otrosRubrosTerceros[%d].total", i), r.Total, 14, 2)
 	}
 	return v.Hallazgos()
+}
+
+// ValidarDetalles aplica a v las reglas de los detalles de un comprobante
+// de venta (forma, aritmética de cada línea e impuestos) y devuelve la suma
+// de los totales de línea y la de los descuentos. decimales es el máximo de
+// decimales de cantidad y precio unitario que admite la versión del esquema.
+//
+// Lo comparten la factura y la liquidación de compra, cuyos detalles son
+// idénticos.
+func ValidarDetalles(v *comprobante.Validador, detalles []Detalle, decimales int) (sumaLineas, sumaDescuentos decimal.Decimal) {
+	for i, d := range detalles {
+		p := fmt.Sprintf("detalles[%d].", i)
+		v.Texto(p+"descripcion", d.Descripcion, true, 300)
+		v.Texto(p+"codigoPrincipal", d.CodigoPrincipal, false, 25)
+		v.Texto(p+"codigoAuxiliar", d.CodigoAuxiliar, false, 25)
+		v.Texto(p+"unidadMedida", d.UnidadMedida, false, 50)
+		if d.CodigoPrincipal == "" {
+			v.Advertirf(p+"codigoPrincipal", "requerido", "la ficha técnica lo marca como obligatorio aunque el XSD lo admite vacío")
+		}
+		v.Numero(p+"cantidad", d.Cantidad, 18, decimales)
+		v.Numero(p+"precioUnitario", d.PrecioUnitario, 18, decimales)
+		v.Numero(p+"descuento", d.Descuento, 14, 2)
+		v.Numero(p+"precioTotalSinImpuesto", d.PrecioTotalSinImpuesto, 14, 2)
+		if esperado := totalLinea(d); !d.PrecioTotalSinImpuesto.Igual(esperado) {
+			v.Errorf(p+"precioTotalSinImpuesto", "detalle.total",
+				"es %s pero cantidad × precioUnitario − descuento = %s", d.PrecioTotalSinImpuesto, esperado)
+		}
+		v.DetallesAdicionales(p, d.DetallesAdicionales)
+		if len(d.Impuestos) == 0 {
+			v.Errorf(p+"impuestos", "requerido", "cada detalle debe declarar al menos un impuesto (use IVA 0%%, no objeto o exento si no grava)")
+		}
+		for j, imp := range d.Impuestos {
+			v.ImpuestoLinea(fmt.Sprintf("%simpuestos[%d].", p, j), imp)
+		}
+		sumaLineas = sumaLineas.Sumar(d.PrecioTotalSinImpuesto)
+		sumaDescuentos = sumaDescuentos.Sumar(d.Descuento)
+	}
+	return sumaLineas, sumaDescuentos
 }

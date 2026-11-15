@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/OsirisRoman/sri-ecuador-go/decimal"
 )
 
 // Severidad distingue los hallazgos que impiden emitir de los que no.
@@ -243,5 +245,39 @@ func (v *Validador) Emisor(p, dirEstablecimiento, contribuyenteEspecial, obligad
 	case "", "SI", "NO":
 	default:
 		v.Errorf(p+"obligadoContabilidad", "catalogo", `debe ser "SI" o "NO"`)
+	}
+}
+
+// formaPagoXSD informa si el código cumple el patrón de los XSD (01 a 21).
+func formaPagoXSD(c string) bool {
+	return len(c) == 2 && SoloDigitos(c) && c >= "01" && c <= "21"
+}
+
+// Pagos valida un bloque <pagos> (Tabla 24) contra el importe del
+// comprobante. campo es la ruta del bloque, por ejemplo
+// "infoFactura.pagos". Que los pagos no sumen el importe es una
+// advertencia: el SRI no lo rechaza.
+func (v *Validador) Pagos(campo string, pagos []Pago, importe decimal.Decimal, obligatorio bool) {
+	if len(pagos) == 0 {
+		if obligatorio {
+			v.Errorf(campo, "requerido", "debe indicar al menos una forma de pago (Tabla 24)")
+		}
+		return
+	}
+	suma := decimal.Cero
+	for i, pg := range pagos {
+		p := fmt.Sprintf("%s[%d].", campo, i)
+		switch _, enTabla := FormasPago[pg.FormaPago]; {
+		case !formaPagoXSD(pg.FormaPago):
+			v.Errorf(p+"formaPago", "catalogo", "código %q inválido (Tabla 24)", pg.FormaPago)
+		case !enTabla:
+			v.Advertirf(p+"formaPago", "catalogo", "el código %q no figura entre las formas de pago vigentes de la Tabla 24", pg.FormaPago)
+		}
+		v.Numero(p+"total", pg.Total, 14, 2)
+		v.Texto(p+"unidadTiempo", pg.UnidadTiempo, false, 10)
+		suma = suma.Sumar(pg.Total)
+	}
+	if !suma.Igual(importe) {
+		v.Advertirf(campo, "pagos.suma", "los pagos suman %s y el importe total es %s", suma.Redondear(2), importe)
 	}
 }
