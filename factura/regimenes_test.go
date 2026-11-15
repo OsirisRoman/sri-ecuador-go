@@ -65,7 +65,7 @@ func TestExportacion(t *testing.T) {
 		{"país con letras", func(f *factura.Factura) { f.InfoFactura.PaisDestino = "CN" }, "formato"},
 		{"campos de exportación sin comercioExterior", func(f *factura.Factura) { f.InfoFactura.ComercioExterior = "" }, "exportacion.comercio-exterior"},
 	}
-	// El SRI rechazó «156» (China en ISO 3166): su tabla usa 331.
+	// «156» es China en ISO 3166; la tabla del SRI usa 331.
 	f = exportacion(t)
 	f.InfoFactura.PaisDestino = "156"
 	if hs := validar(f); !hs.Tiene("pais.catalogo") || hs.Err() != nil {
