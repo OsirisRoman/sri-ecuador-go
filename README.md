@@ -74,6 +74,7 @@ Un ejemplo ejecutable completo está en [`example_test.go`](example_test.go).
 | `notacredito` | Nota de crédito (v1.0.0, 1.1.0); `DesdeFactura` revierte una factura |
 | `notadebito` | Nota de débito (v1.0.0) |
 | `retencion` | Comprobante de retención (v2.0.0, ATS) |
+| `guiaremision` | Guía de remisión (v1.0.0 y v1.1.0) |
 | `comprobante` | Tipos, catálogos y cálculo de impuestos comunes |
 | `clave` | Clave de acceso: generar, analizar, validar |
 | `decimal` | Decimales exactos para importes |

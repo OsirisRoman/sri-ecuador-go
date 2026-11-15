@@ -97,6 +97,18 @@ Conclusiones:
 
 No se probaron: retenciones de ISD, pagos al exterior, dividendos, compra de banano, reembolsos ni la versión 1.0.0.
 
+### Ronda 6 — 2026-11-15: guía de remisión
+
+| Comprobante | Recepción | Autorización |
+|---|---|---|
+| Factura de sustento (cantidad con 6 decimales) | `RECIBIDA` | `AUTORIZADO` |
+| Guía v1.1.0 con esa factura como sustento (número, clave de acceso y fecha), dos detalles, cantidad con 6 decimales, detalle adicional con `&` y `Ñ`, ruta | `RECIBIDA` | **`AUTORIZADO`** |
+| Guía v1.0.0 sin comprobante de sustento, traslado entre establecimientos (`codEstabDestino`) | `RECIBIDA` | **`AUTORIZADO`** |
+
+En ambas guías el transporte empieza el día de la emisión y termina al día siguiente, y la fecha de la clave de acceso es la de inicio del transporte. Los comprobantes devueltos son idénticos byte a byte a los enviados.
+
+No se probaron: varios destinatarios, documento aduanero, emisión anterior al día del traslado (`GenerarClaveAccesoEn`) ni el rechazo 82.
+
 Qué **no** demuestran estas rondas:
 
 - Un solo certificado (Banco Central del Ecuador) y un solo emisor (persona natural). Certificados de otras entidades (Security Data, ANF, Uanataca…) pueden tener emisores con atributos distintos en `X509IssuerName`.

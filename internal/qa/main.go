@@ -24,6 +24,7 @@ import (
 	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
 	"github.com/OsirisRoman/sri-ecuador-go/factura"
+	"github.com/OsirisRoman/sri-ecuador-go/guiaremision"
 	"github.com/OsirisRoman/sri-ecuador-go/internal/entorno"
 	"github.com/OsirisRoman/sri-ecuador-go/notacredito"
 	"github.com/OsirisRoman/sri-ecuador-go/notadebito"
@@ -145,6 +146,7 @@ func main() {
 	retDesde := flag.Int("ret-desde", 0, "secuencial de comprobante de retención; activa el escenario de retención")
 	ndDesde := flag.Int("nd-desde", 0, "secuencial de nota de débito; activa el escenario de nota de débito")
 	ncDesde := flag.Int("nc-desde", 0, "primer secuencial de nota de crédito; activa los escenarios de nota de crédito")
+	guiaDesde := flag.Int("guia-desde", 0, "primer secuencial de guía de remisión; activa los escenarios de guía (usa 2)")
 	dir := flag.String("dir", "evidencia-privada", "directorio de evidencias (excluido de Git)")
 	flag.Parse()
 	if *desde < 1 {
@@ -175,7 +177,7 @@ func main() {
 		if *solo != "" && !strings.Contains(","+*solo+",", ","+e.nombre+",") {
 			continue
 		}
-		if *solo == "" && (*ncDesde > 0 || *ndDesde > 0 || *retDesde > 0) {
+		if *solo == "" && (*ncDesde > 0 || *ndDesde > 0 || *retDesde > 0 || *guiaDesde > 0) {
 			continue // con -nc-desde o -nd-desde y sin -solo no se repiten las facturas
 		}
 		decir("\n== %s (secuencial %d, %s)\n   %s", e.nombre, sec, e.algoritmo, e.descripcion)
@@ -399,6 +401,94 @@ func main() {
 			base := filepath.Join(ronda, fmt.Sprintf("ret-%d", *retDesde))
 			os.WriteFile(base+".firmado.xml", prep.XMLFirmado, 0o600)
 			decir("   local: reglas OK, XSD OK, firma verificada; v%s; renta 312 (2 %%) + IVA 30 %%; total retenido %s", retencion.Version, c.TotalRetenido())
+			if !enviar(cli, prep.XMLFirmado, base, decir) {
+				fallos++
+			}
+		}
+	}
+	if *guiaDesde > 0 {
+		decir("\n== guia-remision (factura %d, guías %d y %d)", sec, *guiaDesde, *guiaDesde+1)
+		emisor, err := entorno.Emisor(comprobante.CodFactura, sec)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		f := &factura.Factura{InfoTributaria: emisor}
+		f.InfoFactura.FechaEmision = comprobante.Hoy()
+		f.InfoFactura.ObligadoContabilidad = entorno.Valor("SRI_EMISOR_OBLIGADO_CONTABILIDAD", "NO")
+		compradorRUC(f)
+		f.Detalles = []factura.Detalle{factura.LineaIVA("M-1", "Mercadería para traslado", d("10.254632"), d("3.00"), comprobante.IVA15)}
+		f.InfoFactura.Pagos = []comprobante.Pago{{FormaPago: comprobante.PagoOtrosSistFinanciero}}
+		f.Calcular()
+		f.GenerarClaveAcceso("")
+		cli, err := sri.Nuevo(sri.Config{Ambiente: comprobante.Pruebas, Certificado: cert, RUC: emisor.RUC})
+		if err != nil {
+			panic(err)
+		}
+		sustento := false
+		if prep, err := cli.Preparar(f); err != nil {
+			decir("   ERROR local en la factura: %v", err)
+			fallos++
+		} else {
+			sec++
+			decir("   -- factura de sustento, importe %s", f.InfoFactura.ImporteTotal)
+			sustento = enviar(cli, prep.XMLFirmado, filepath.Join(ronda, fmt.Sprintf("%d-factura-para-guia", sec-1)), decir)
+			if !sustento {
+				fallos++
+			}
+		}
+		for i, ver := range []string{guiaremision.V110, guiaremision.V100} {
+			it, _ := entorno.Emisor(comprobante.CodGuiaRemision, *guiaDesde+i)
+			dest := guiaremision.Destinatario{
+				IdentificacionDestinatario: rucSRI,
+				RazonSocialDestinatario:    razonPruebas,
+				DirDestinatario:            "Av. Amazonas y Unión Nacional de Periodistas",
+				MotivoTraslado:             "Venta (prueba)",
+				Ruta:                       "Quito – Cayambe – Otavalo",
+				Detalles: []guiaremision.Detalle{
+					{CodigoInterno: "M-1", Descripcion: "Mercadería para traslado", Cantidad: d("10.254632"),
+						DetallesAdicionales: []comprobante.DetAdicional{{Nombre: "Lote", Valor: "L-77 & Ñ"}}},
+					{Descripcion: "Pallet de madera", Cantidad: d("2")},
+				},
+			}
+			descripcion := "sin comprobante de sustento, traslado entre establecimientos"
+			if ver == guiaremision.V110 && sustento {
+				dest.Sustento(comprobante.CodFactura, f.InfoTributaria.NumeroComprobante(), f.InfoTributaria.ClaveAcceso, f.InfoFactura.FechaEmision)
+				descripcion = "con factura de sustento, cantidad con 6 decimales"
+			} else {
+				dest.MotivoTraslado = "Traslado entre establecimientos (prueba)"
+				dest.CodEstabDestino = "001"
+				dest.IdentificacionDestinatario, dest.RazonSocialDestinatario = it.RUC, it.RazonSocial
+			}
+			if ver == guiaremision.V100 {
+				dest.Detalles[0].Cantidad = d("10.25")
+			}
+			g := &guiaremision.GuiaRemision{
+				Version:        ver,
+				InfoTributaria: it,
+				InfoGuiaRemision: guiaremision.InfoGuiaRemision{
+					DirPartida:                      it.DirMatriz,
+					RazonSocialTransportista:        razonPruebas,
+					TipoIdentificacionTransportista: comprobante.IDRuc,
+					RucTransportista:                rucSRI,
+					ObligadoContabilidad:            entorno.Valor("SRI_EMISOR_OBLIGADO_CONTABILIDAD", "NO"),
+					FechaIniTransporte:              comprobante.Hoy(),
+					FechaFinTransporte:              comprobante.FechaDe(time.Now().AddDate(0, 0, 1)),
+					Placa:                           "PBA1234",
+				},
+				Destinatarios: []guiaremision.Destinatario{dest},
+				InfoAdicional: []comprobante.CampoAdicional{{Nombre: "Observación", Valor: "Guía de prueba"}},
+			}
+			g.GenerarClaveAcceso("")
+			decir("   -- guía de remisión %d, v%s: %s", *guiaDesde+i, ver, descripcion)
+			prep, err := cli.Preparar(g)
+			if err != nil {
+				decir("   ERROR local en la guía: %v", err)
+				fallos++
+				continue
+			}
+			base := filepath.Join(ronda, fmt.Sprintf("guia-%d", *guiaDesde+i))
+			os.WriteFile(base+".firmado.xml", prep.XMLFirmado, 0o600)
 			if !enviar(cli, prep.XMLFirmado, base, decir) {
 				fallos++
 			}
