@@ -1,0 +1,45 @@
+# Instrucciones para asistentes de IA
+
+Este archivo orienta a un asistente de IA (y a cualquier persona con prisa) que trabaje con `sri-ecuador-go`, un SDK en Go para la facturación electrónica del SRI de Ecuador (esquema offline).
+
+## Si vas a USAR el SDK en otra aplicación
+
+Lee primero [`docs/guia-de-integracion.md`](docs/guia-de-integracion.md) y toma como modelo [`ejemplos/emision/main.go`](ejemplos/emision/main.go), que compila y se ejecuta sin configuración (`go run ./ejemplos/emision`). No inventes funciones: comprueba los nombres con `go doc github.com/OsirisRoman/sri-ecuador-go/<paquete>`.
+
+Lo esencial, que no debes saltarte:
+
+- Importes con `decimal.Decimal`, nunca `float64`.
+- Orden: llenar la estructura → `Calcular()` → `GenerarClaveAcceso("")` → `cliente.Preparar` → guardar clave y XML firmado → `cliente.Reanudar` → actuar según `res.Estado`.
+- Solo `sri.EstadoAutorizado` es un comprobante válido. `RECIBIDO` es pendiente; un error de red es estado desconocido y se reintenta con el **mismo** XML firmado, sin generar otra clave ni otro secuencial.
+- El secuencial lo asigna y lo guarda la aplicación, no el SDK.
+- Fecha de emisión con `comprobante.Hoy()` (hora de Ecuador).
+- Nunca envíes a producción (`comprobante.Produccion`) sin que la persona responsable lo pida expresamente; desarrolla contra `sritest` o el ambiente de pruebas.
+- No pongas contraseñas, certificados `.p12` ni credenciales SMTP en el código, en los registros ni en el repositorio.
+- Los códigos de país son los de `comprobante.Paises` (tabla del SRI), no ISO 3166.
+
+## Si vas a MODIFICAR el SDK
+
+```sh
+go build ./... && go vet ./... && go test -race ./...
+gofmt -l <directorios del proyecto>  # no ejecutes gofmt sobre "." si existe research/
+```
+
+- Código, comentarios y documentación en español; los nombres siguen las etiquetas XML del SRI (`InfoTributaria`, `RazonSocial`).
+- La especificación es la ficha técnica del SRI (versión citada en `docs/fuentes.md`); cita la sección o el anexo en los comentarios de cada regla.
+- Dependencias mínimas: antes de añadir un módulo, justifícalo en `docs/decisiones.md` y anota su licencia en `NOTICE` y `docs/fuentes.md`. Sin cgo.
+- Cada regla de validación tiene un identificador estable (`Hallazgo.Regla`) y una prueba. Los datos que caducan se generan con un script y se anotan en `docs/actualizar-catalogos.md`.
+- Lo que se afirma en `docs/capacidades.md` y `docs/pruebas-sri.md` debe distinguir lo probado contra el SRI real de lo probado solo en local.
+- No incluyas en el repositorio certificados, contraseñas, `.env`, comprobantes reales ni datos de contribuyentes; los ejemplos usan datos ficticios o los que publica la ficha técnica.
+- Trabaja en ramas `feat/`, `fix/` o `chore/` y fusiona con el CI en verde.
+
+## Dónde está cada cosa
+
+| Tema | Archivo |
+|---|---|
+| Cómo integrar | `docs/guia-de-integracion.md` |
+| Ejemplo ejecutable | `ejemplos/emision/main.go`, `example_test.go` |
+| Qué está implementado y sus límites | `docs/capacidades.md` |
+| Qué se ha probado contra el SRI | `docs/pruebas-sri.md` |
+| Decisiones de diseño | `docs/decisiones.md` |
+| Datos que caducan y cómo actualizarlos | `docs/actualizar-catalogos.md` |
+| Fuentes y licencias | `docs/fuentes.md`, `NOTICE` |

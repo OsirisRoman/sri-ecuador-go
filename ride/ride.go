@@ -280,15 +280,34 @@ func raiz(doc []byte) string {
 }
 
 func (m *modelo) dibujar(logo *logotipo, barras bool) []byte {
-	d := pdf.Nuevo()
-	d.Titulo = fmt.Sprintf("%s %s", m.titulo, m.it.NumeroComprobante())
-	d.Autor = m.it.RazonSocial
-	l := &lienzo{d: d, y: margen}
-	m.cabecera(l, logo, barras)
-	for _, b := range m.bloques {
-		b(l)
+	componer := func(extraSep, extraFila float64) (*pdf.Documento, *lienzo) {
+		d := pdf.Nuevo()
+		d.Titulo = fmt.Sprintf("%s %s", m.titulo, m.it.NumeroComprobante())
+		d.Autor = m.it.RazonSocial
+		l := &lienzo{d: d, y: margen, extraSep: extraSep, extraFila: extraFila}
+		m.cabecera(l, logo, barras)
+		for _, b := range m.bloques {
+			b(l)
+		}
+		m.cierre(l)
+		return d, l
 	}
-	m.cierre(l)
+	d, l := componer(0, 0)
+	// Un comprobante corto dejaría media hoja en blanco. Si cabe en una
+	// página, el espacio sobrante se reparte, con límites, entre las filas
+	// de las tablas y las separaciones entre bloques; lo que aún sobre
+	// queda al pie. Los comprobantes de varias páginas no se tocan.
+	if sobra := pie - (l.y - separa); d.Paginas() == 1 && sobra > 20 && l.nSep > 1 {
+		extraFila := 0.0
+		if l.nFilas > 0 {
+			extraFila = min(sobra*0.45/float64(l.nFilas), maxExtraFila)
+		}
+		resto := sobra - extraFila*float64(l.nFilas)
+		extraSep := min(resto*0.6/float64(l.nSep-1), maxExtraSep)
+		if d2, _ := componer(extraSep, extraFila); d2.Paginas() == 1 {
+			d = d2
+		}
+	}
 	return d.Bytes()
 }
 
@@ -386,11 +405,11 @@ func (m *modelo) cabecera(l *lienzo, logo *logotipo, barras bool) {
 		}
 		yEmisor, hCaja = l.y+alto-hEmisor, hEmisor
 	}
-	l.d.Rect(margen, yEmisor, wIzq, hCaja, grosor)
+	l.d.RectRedondeado(margen, yEmisor, wIzq, hCaja, radio, grosor)
 	emisor(true, yEmisor)
-	l.d.Rect(xDer, l.y, wDer, alto, grosor)
+	l.d.RectRedondeado(xDer, l.y, wDer, alto, radio, grosor)
 	identificacion(true, l.y)
-	l.y += alto + separa
+	l.y += alto + l.sep()
 }
 
 // cierre dibuja la información adicional y las formas de pago a la
@@ -419,34 +438,41 @@ func (m *modelo) cierre(l *lienzo) {
 	hAdic := adicional(false, 0)
 	hPagos := 0.0
 	if len(m.pagos) > 0 {
-		hPagos = float64(len(m.pagos)+1)*(interlinea(tamTabla)+2*relleno) + 36 // holgura para textos partidos
+		hPagos = float64(len(m.pagos)+1)*(interlinea(tamTabla)+2*relleno+l.extraFila) + 36 // holgura para textos partidos
 		if hAdic > 0 {
 			hPagos += separa
 		}
 	}
-	hTot := float64(len(m.totales)) * (interlinea(tam) + 7)
+	hFilaTot := interlinea(tam) + 7 + l.extraFila
+	hTot := float64(len(m.totales)) * hFilaTot
 	l.asegurar(max(hAdic+hPagos, hTot))
 	y0 := l.y
 
 	// Totales (derecha).
 	y := y0
-	for _, t := range m.totales {
-		h := interlinea(tam) + 7
-		l.d.Rect(xDer, y, wDer*0.62, h, grosor)
-		l.d.Rect(xDer+wDer*0.62, y, wDer*0.38, h, grosor)
+	for i, t := range m.totales {
+		h := hFilaTot
+		l.nFilas++
+		if i > 0 {
+			l.d.Linea(xDer, y, xDer+wDer, y, grosor)
+		}
 		f := pdf.Normal
 		if t.rotulo == rotuloTotal {
 			f = pdf.Negrita
 		}
-		l.d.Texto(xDer+relleno, y+tam+5, t.rotulo, f, tam)
-		l.d.TextoDerecha(xDer+wDer-relleno, y+tam+5, t.valor, f, tam)
+		l.d.Texto(xDer+relleno, y+tam+5+l.extraFila/2, t.rotulo, f, tam)
+		l.d.TextoDerecha(xDer+wDer-relleno, y+tam+5+l.extraFila/2, t.valor, f, tam)
 		y += h
+	}
+	if len(m.totales) > 0 {
+		l.d.Linea(xDer+wDer*0.62, y0, xDer+wDer*0.62, y, grosor)
+		l.d.RectRedondeado(xDer, y0, wDer, y-y0, radio, grosor)
 	}
 	finDer := y
 
 	// Información adicional y pagos (izquierda).
 	if hAdic > 0 {
-		l.d.Rect(margen, l.y, wIzq, hAdic, grosor)
+		l.d.RectRedondeado(margen, l.y, wIzq, hAdic, radio, grosor)
 		adicional(true, l.y)
 		l.y += hAdic + separa
 	}
@@ -477,10 +503,17 @@ func (m *modelo) cierre(l *lienzo) {
 		}
 		l.tabla(margen, wIzq, cols, fp)
 	}
-	l.y = max(l.y, finDer) + separa
+	l.y = max(l.y, finDer) + l.sep()
 }
 
 const rotuloTotal = "VALOR TOTAL"
+
+// Máximo espacio que se añade a cada fila de tabla y a cada separación
+// entre bloques al repartir un comprobante corto por la hoja.
+const (
+	maxExtraFila = 9.0
+	maxExtraSep  = 26.0
+)
 
 // nombreDocumento traduce un código de la Tabla 3 (y afines) a su nombre.
 func nombreDocumento(cod string) string {
