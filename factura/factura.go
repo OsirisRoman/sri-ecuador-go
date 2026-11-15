@@ -236,6 +236,9 @@ func (f *Factura) XML() ([]byte, error) {
 	return comprobante.Serializar(&copia)
 }
 
+// Info devuelve el bloque infoTributaria.
+func (f *Factura) Info() comprobante.InfoTributaria { return f.InfoTributaria }
+
 // Parse lee una factura desde su XML, firmado o no (la firma se ignora; para
 // comprobarla use xades.Verificar).
 func Parse(doc []byte) (*Factura, error) {
