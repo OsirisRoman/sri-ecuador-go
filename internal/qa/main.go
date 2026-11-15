@@ -127,6 +127,77 @@ var escenarios = []escenario{
 		}},
 }
 
+// Escenarios de regímenes específicos de factura; se ejecutan solo con
+// -solo.
+func init() {
+	escenarios = append(escenarios,
+		escenario{nombre: "exportacion", descripcion: "v1.1.0 de exportación (Anexo 4): comprador del exterior, IVA 0 %, incoterms, flete y seguro",
+			construir: func(f *factura.Factura) {
+				i := &f.InfoFactura
+				i.TipoIdentificacionComprador = comprobante.IDExterior
+				i.RazonSocialComprador = razonPruebas
+				i.IdentificacionComprador = "EXT-123456"
+				i.DireccionComprador = "Shanghai, China"
+				i.ComercioExterior = factura.ComercioExteriorExportador
+				i.IncoTermFactura, i.LugarIncoTerm = "CIF", "GUAYAQUIL"
+				i.PaisOrigen, i.PaisDestino, i.PaisAdquisicion = "593", "331", "331"
+				i.PuertoEmbarque, i.PuertoDestino = "GUAYAQUIL", "SHANGHAI"
+				i.IncoTermTotalSinImpuestos = "FOB"
+				flete, seguro := d("100.00"), d("20.50")
+				i.FleteInternacional, i.SeguroInternacional = &flete, &seguro
+				f.Detalles = []factura.Detalle{factura.LineaIVA("CACAO", "Cacao en grano para exportación", d("10"), d("120.00"), comprobante.IVA0)}
+				i.Pagos = []comprobante.Pago{{FormaPago: comprobante.PagoOtrosSistFinanciero}}
+			}},
+		escenario{nombre: "reembolso", descripcion: "v1.1.0 de reembolso de gastos (Anexo 5): reembolsa la factura 113 de este mismo emisor",
+			construir: func(f *factura.Factura) {
+				compradorRUC(f)
+				origen := facturaAutorizada("113-")
+				oi := origen.InfoFactura
+				r := factura.ReembolsoDetalle{
+					TipoIdentificacionProveedorReembolso: comprobante.IDRuc,
+					IdentificacionProveedorReembolso:     origen.InfoTributaria.RUC,
+					CodPaisPagoProveedorReembolso:        "593",
+					TipoProveedorReembolso:               "01",
+					CodDocReembolso:                      comprobante.CodFactura,
+					EstabDocReembolso:                    origen.InfoTributaria.Estab,
+					PtoEmiDocReembolso:                   origen.InfoTributaria.PtoEmi,
+					SecuencialDocReembolso:               origen.InfoTributaria.Secuencial,
+					FechaEmisionDocReembolso:             oi.FechaEmision,
+					NumeroAutorizacionDocReemb:           origen.InfoTributaria.ClaveAcceso,
+				}
+				for _, t := range oi.TotalConImpuestos {
+					r.DetalleImpuestos = append(r.DetalleImpuestos, factura.ImpuestoReembolso{
+						Codigo: t.Codigo, CodigoPorcentaje: t.CodigoPorcentaje, Tarifa: *t.Tarifa,
+						BaseImponibleReembolso: t.BaseImponible, ImpuestoReembolso: t.Valor,
+					})
+				}
+				f.Reembolsos = []factura.ReembolsoDetalle{r}
+				f.Detalles = []factura.Detalle{factura.LineaIVA("REEMB", "REEMBOLSO DE GASTOS", d("1"), oi.ImporteTotal, comprobante.IVA0)}
+				f.InfoFactura.Pagos = []comprobante.Pago{{FormaPago: comprobante.PagoOtrosSistFinanciero}}
+			}},
+	)
+}
+
+// facturaAutorizada lee de las evidencias una factura autorizada cuyo
+// archivo empieza por el prefijo dado.
+func facturaAutorizada(prefijo string) *factura.Factura {
+	rutas, _ := filepath.Glob(filepath.Join("evidencia-privada", "qa-*", prefijo+"*.autorizado.xml"))
+	if len(rutas) == 0 {
+		panic("no hay evidencia de la factura " + prefijo)
+	}
+	doc, err := os.ReadFile(rutas[0])
+	if err != nil {
+		panic(err)
+	}
+	s := string(doc)
+	a, b := strings.Index(s, "<![CDATA["), strings.LastIndex(s, "]]>")
+	f, err := factura.Parse([]byte(s[a+9 : b]))
+	if err != nil {
+		panic(err)
+	}
+	return f
+}
+
 func pagosPendientes(f *factura.Factura) {
 	// El último pago sin total absorbe el saldo.
 	f.Calcular()
@@ -177,6 +248,9 @@ func main() {
 	fallos := 0
 	for _, e := range escenarios {
 		if *solo != "" && !strings.Contains(","+*solo+",", ","+e.nombre+",") {
+			continue
+		}
+		if *solo == "" && (e.nombre == "exportacion" || e.nombre == "reembolso") {
 			continue
 		}
 		if *solo == "" && (*ncDesde > 0 || *ndDesde > 0 || *retDesde > 0 || *guiaDesde > 0 || *liqDesde > 0) {

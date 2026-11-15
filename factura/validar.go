@@ -121,9 +121,11 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 	// --- Pagos e información adicional ------------------------------------
 	v.Pagos("infoFactura.pagos", info.Pagos, info.ImporteTotal, true)
 	v.Adicionales(f.InfoAdicional, f.MaquinaFiscal)
-	if f.TipoNegociable != nil {
-		v.Texto("tipoNegociable.correo", f.TipoNegociable.Correo, true, 100)
-	}
+	// --- Exportación, reembolsos y requisitos por actividad ---------------
+	f.validarExportacion(v)
+	ValidarReembolsos(v, "infoFactura.", DatosReembolso{info.CodDocReembolso, info.TotalComprobantesReembolso,
+		info.TotalBaseImponibleReembolso, info.TotalImpuestoReembolso}, f.Reembolsos, true)
+	f.validarActividades(v)
 	for i, r := range f.OtrosRubrosTerceros {
 		v.Texto(fmt.Sprintf("otrosRubrosTerceros[%d].concepto", i), r.Concepto, true, 300)
 		v.Numero(fmt.Sprintf("otrosRubrosTerceros[%d].total", i), r.Total, 14, 2)

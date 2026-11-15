@@ -281,3 +281,15 @@ func (v *Validador) Pagos(campo string, pagos []Pago, importe decimal.Decimal, o
 		v.Advertirf(campo, "pagos.suma", "los pagos suman %s y el importe total es %s", suma.Redondear(2), importe)
 	}
 }
+
+// Pais valida un código de país de la Tabla 25. Un código de tres dígitos
+// que no figura en la tabla se reporta como advertencia, porque la copia
+// incluida puede haber quedado atrás respecto de la del SRI.
+func (v *Validador) Pais(campo, codigo string) {
+	if codigo == "" || !v.Digitos(campo, codigo, 3) {
+		return
+	}
+	if _, ok := Paises[codigo]; !ok {
+		v.Advertirf(campo, "pais.catalogo", "el código %s no figura en la Tabla 25; el SRI usa los códigos de país del Catálogo ATS, no los de ISO 3166, y rechaza los desconocidos (error 52)", codigo)
+	}
+}

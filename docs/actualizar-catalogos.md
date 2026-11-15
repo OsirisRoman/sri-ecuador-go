@@ -8,6 +8,8 @@ El SDK incluye copias de datos que el SRI cambia sin previo aviso. **Deben revis
 | Porcentajes de retención de IVA | `retencion.PorcentajesIVA` | Ficha técnica, Tabla 20 | Ficha v2.34 |
 | Tarifas de IVA | `comprobante.TarifasIVA` | Ficha técnica, Tabla 17 | Ficha v2.34 |
 | Formas de pago | `comprobante.FormasPago` | Ficha técnica, Tabla 24 | Ficha v2.34 |
+| Códigos de país | `comprobante.Paises` (generado desde el texto de la ficha) | Ficha técnica, Tabla 25 (Catálogo ATS) | Ficha v2.34, 259 códigos |
+| Combustibles y códigos de transporte | `factura.Combustibles`, `factura.CodAuxTransporte*` | Ficha técnica, Tablas 30 y 32 | Ficha v2.34 |
 | Límite de factura a consumidor final | `factura.LimiteConsumidorFinal` | Ficha técnica, sección 9.10 | Ficha v2.34 (USD 50) |
 | Leyendas RIMPE y demás requisitos de llenado | `comprobante`, `esquema.Ajustes` | Ficha técnica, anexos | Ficha v2.34 |
 | Esquemas XSD | `esquema/xsd/` | <https://www.sri.gob.ec/facturacion-electronica> | Ver `esquema/xsd/PROCEDENCIA.md` |

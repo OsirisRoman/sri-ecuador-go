@@ -122,10 +122,25 @@ No se probaron: reembolsos (`codDocReembolso` 41), proveedores del exterior, liq
 
 Con esta ronda, los seis tipos de comprobante del esquema offline han sido autorizados al menos una vez en el ambiente de pruebas.
 
+### Ronda 8 — 2026-11-15: factura de exportación y de reembolso
+
+| Comprobante | Recepción | Autorización |
+|---|---|---|
+| Factura de exportación (Anexo 4): comprador con identificación del exterior, IVA 0 %, incoterms, flete y seguro, con los países de destino y adquisición en código ISO 3166 (156) | `RECIBIDA` | **`NO AUTORIZADO`**, error 52: «El codigo de pais: 156 no existe para el campo paisDestino» |
+| La misma factura con el código de la Tabla 25 (331), mismo secuencial y nueva clave | `RECIBIDA` | **`AUTORIZADO`** |
+| Factura de reembolso de gastos (Anexo 5): `codDocReembolso` 41, un comprobante reembolsado (una factura autorizada en la ronda 2) con dos tarifas de IVA | `RECIBIDA` | **`AUTORIZADO`** |
+
+Conclusiones:
+
+- El SRI valida los códigos de país contra su propia tabla (Tabla 25, la del Catálogo ATS), que no coincide con ISO 3166. A raíz de este rechazo el SDK incluye la tabla y advierte de los códigos desconocidos antes de enviar.
+- El importe total de la factura de exportación incluye el flete y el seguro, como calcula el SDK.
+
+No se probaron contra el SRI: combustibles, transporte comercial, factura comercial negociable ni reembolsos en liquidación de compra (sus reglas solo tienen pruebas locales).
+
 Qué **no** demuestran estas rondas:
 
 - Un solo certificado (Banco Central del Ecuador) y un solo emisor (persona natural). Certificados de otras entidades (Security Data, ANF, Uanataca…) pueden tener emisores con atributos distintos en `X509IssuerName`.
-- Sin ICE, IRBPNR, exportación, reembolsos, retenciones en factura, negociable ni sustitutiva de guía de remisión.
+- Sin ICE, IRBPNR, retenciones en factura, negociable ni sustitutiva de guía de remisión.
 - Sin la leyenda de negocio popular RIMPE (requiere un emisor de ese régimen).
 - No se ha observado un comprobante en procesamiento prolongado ni el error 70.
 - Solo el ambiente de pruebas, que puede validar menos que producción.
@@ -141,7 +156,7 @@ Los RIDE no se envían al SRI; lo que sigue son comprobaciones locales sobre los
 | El código de barras es legible | Lector zbar (`zbarimg`) sobre el PDF rasterizado a 300 ppp | Code 128 leído en los seis; coincide con la clave de acceso impresa |
 | Correo con RIDE adjunto | Mensaje compuesto sin enviar | Dos adjuntos: XML y PDF |
 
-No se ha impreso en papel ni se ha leído el código con un lector físico. No se ha enviado todavía un correo real con el RIDE adjunto.
+No se ha impreso en papel ni se ha leído el código con un lector físico.
 
 ## Correo
 
@@ -149,6 +164,8 @@ No se ha impreso en papel ni se ha leído el código con un lector físico. No s
 |---|---|---|
 | Envío con texto, HTML y XML adjunto | Mailpit (contenedor local, sin cifrado) | Entregado; cabeceras, cuerpo y adjunto correctos |
 | Entrega de una nota de crédito autorizada | Servidor SMTP real del propietario, puerto 587 con STARTTLS y autenticación (2026-11-15) | Mensaje aceptado por el servidor y **recibido en la bandeja de entrada** (Gmail), con el cuerpo y el XML adjunto correctos |
+
+| Entrega de una factura autorizada con XML y RIDE adjuntos | El mismo servidor SMTP real (2026-11-15) | Mensaje aceptado por el servidor; pendiente de que el propietario confirme la recepción y que el PDF se abre bien |
 
 Que un servidor acepte el mensaje no garantiza la llegada a la bandeja de entrada: eso depende de la reputación del remitente (SPF, DKIM, DMARC), ajena al SDK.
 

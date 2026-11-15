@@ -30,6 +30,7 @@ func totalLinea(d Detalle) decimal.Decimal {
 //     y se aplica la tarifa como porcentaje.
 //   - infoFactura: totalSinImpuestos, totalDescuento, totalConImpuestos e
 //     importeTotal (incluye propina, rubros de exportación y de terceros).
+//   - Reembolsos: si los hay, codDocReembolso (41) y sus tres totales.
 //   - Pagos: si hay un único pago sin total, se le asigna el importe total.
 //
 // Todos los importes monetarios se redondean a 2 decimales, mitad hacia
@@ -79,6 +80,12 @@ func (f *Factura) Calcular() {
 
 	info.Propina = info.Propina.Redondear(2)
 	info.ImporteTotal = f.importeEsperado(impuestos)
+	if len(f.Reembolsos) > 0 {
+		base, imp := TotalesReembolso(f.Reembolsos)
+		suma := base.Sumar(imp)
+		info.CodDocReembolso = CodDocReembolso
+		info.TotalBaseImponibleReembolso, info.TotalImpuestoReembolso, info.TotalComprobantesReembolso = &base, &imp, &suma
+	}
 	if len(info.Pagos) == 1 && info.Pagos[0].Total.EsCero() {
 		info.Pagos[0].Total = info.ImporteTotal
 	}
