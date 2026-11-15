@@ -50,7 +50,7 @@ Solo si tiene un RUC habilitado en el **ambiente de pruebas** y un certificado d
 - **Validaciones:** cada regla lleva un identificador estable (`Hallazgo.Regla`) y una prueba. Si la regla depende de un dato que caduca, que sea una advertencia.
 - **Dependencias:** las mínimas, sin cgo en el núcleo. Si propone una, explique por qué en [`docs/decisiones.md`](docs/decisiones.md) y anote su licencia en `NOTICE` y [`docs/fuentes.md`](docs/fuentes.md). No se acepta código con licencias incompatibles con Apache 2.0 (por ejemplo, GPL o LGPL).
 - **Datos generados:** los catálogos se generan con un script desde la fuente oficial, no se transcriben a mano.
-- **Compatibilidad:** hasta la versión 1.0 la API puede cambiar, pero explique cada cambio incompatible en `CHANGELOG.md`.
+- **Compatibilidad:** hasta la versión 1.0 la API puede cambiar, pero explique cada cambio incompatible en `CHANGELOG.md`. Ver la [política de versiones](docs/versionado.md).
 
 ## Qué debe traer un *pull request*
 
