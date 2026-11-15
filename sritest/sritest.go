@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +50,9 @@ type Servidor struct {
 	http *httptest.Server
 	mu   sync.Mutex
 	docs map[string]*registro
+	// lotes asocia la clave de acceso de cada lote con las de sus
+	// comprobantes, en orden.
+	lotes map[string][]string
 	// fallos pendientes de inyectar: códigos HTTP a devolver en las
 	// próximas peticiones.
 	fallos []int
@@ -65,7 +69,7 @@ type registro struct {
 
 // Nuevo arranca un servidor en un puerto local aleatorio.
 func Nuevo() *Servidor {
-	s := &Servidor{VerificarFirma: true, Ahora: time.Now, docs: map[string]*registro{}}
+	s := &Servidor{VerificarFirma: true, Ahora: time.Now, docs: map[string]*registro{}, lotes: map[string][]string{}}
 	mux := http.NewServeMux()
 	e := ws.EndpointsEn("")
 	mux.HandleFunc(e.Recepcion, s.conFallos(s.recepcion))
@@ -157,22 +161,29 @@ func (s *Servidor) conFallos(h http.HandlerFunc) http.HandlerFunc {
 }
 
 func parametro(r *http.Request, nombre string) (string, error) {
+	_, v, err := parametros(r, nombre)
+	return v, err
+}
+
+// parametros busca en el sobre SOAP el primer elemento con alguno de los
+// nombres dados y devuelve cuál encontró y su contenido.
+func parametros(r *http.Request, nombres ...string) (string, string, error) {
 	datos, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	dec := xml.NewDecoder(strings.NewReader(string(datos)))
 	for {
 		tok, err := dec.Token()
 		if err != nil {
-			return "", fmt.Errorf("sobre SOAP sin <%s>", nombre)
+			return "", "", fmt.Errorf("sobre SOAP sin <%s>", strings.Join(nombres, "> ni <"))
 		}
-		if se, ok := tok.(xml.StartElement); ok && se.Name.Local == nombre {
+		if se, ok := tok.(xml.StartElement); ok && slices.Contains(nombres, se.Name.Local) {
 			var v string
 			if err := dec.DecodeElement(&v, &se); err != nil {
-				return "", err
+				return "", "", err
 			}
-			return strings.TrimSpace(v), nil
+			return se.Name.Local, strings.TrimSpace(v), nil
 		}
 	}
 }
@@ -231,6 +242,10 @@ func (s *Servidor) recepcion(w http.ResponseWriter, r *http.Request) {
 		devolver("N/A", "49", "ARGUMENTOS QUE ENVIAN AL WS NULOS", "")
 		return
 	}
+	if raizDe(doc) == "lote" {
+		s.recepcionLote(w, doc, devolver)
+		return
+	}
 	if len(doc) > ws.TamanoMaximo {
 		devolver("N/A", "26", "TAMAÑO MAXIMO SUPERADO", "")
 		return
@@ -270,6 +285,112 @@ func (s *Servidor) recepcion(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolver decide el resultado de un comprobante recibido.
+// raizDe devuelve el nombre del elemento raíz de doc, o "".
+func raizDe(doc []byte) string {
+	dec := xml.NewDecoder(strings.NewReader(string(doc)))
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return ""
+		}
+		if se, ok := tok.(xml.StartElement); ok {
+			return se.Name.Local
+		}
+	}
+}
+
+// recepcionLote recibe un <lote> (Tabla 8). Como el SRI real, acepta el
+// lote si su forma es correcta y deja para la autorización el resultado de
+// cada comprobante, incluidos los que no cumplen el XSD.
+func (s *Servidor) recepcionLote(w http.ResponseWriter, doc []byte, devolver func(claveAcceso, id, msg, info string)) {
+	var l struct {
+		Clave        string   `xml:"claveAcceso"`
+		RUC          string   `xml:"ruc"`
+		Comprobantes []string `xml:"comprobantes>comprobante"`
+	}
+	if len(doc) > ws.TamanoMaximoLote {
+		devolver("N/A", "26", "TAMAÑO MAXIMO SUPERADO", "")
+		return
+	}
+	if err := xml.Unmarshal(doc, &l); err != nil || clave.Validar(l.Clave) != nil || len(l.Comprobantes) == 0 || len(l.Comprobantes) > ws.MaxComprobantesLote {
+		devolver(l.Clave, "35", "ARCHIVO NO CUMPLE ESTRUCTURA XML", "lote mal formado")
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, existe := s.lotes[l.Clave]; existe {
+		devolver(l.Clave, ws.CodClaveRegistrada, "CLAVE ACCESO REGISTRADA", "")
+		return
+	}
+	var claves []string
+	for i, c := range l.Comprobantes {
+		xmlDoc := []byte(strings.TrimSpace(c))
+		var cab struct {
+			Clave string `xml:"infoTributaria>claveAcceso"`
+		}
+		xml.Unmarshal(xmlDoc, &cab)
+		id := cab.Clave
+		if clave.Validar(id) != nil {
+			id = fmt.Sprintf("%s#%d", l.Clave, i) // sin clave utilizable: identificador interno
+		}
+		reg := &registro{xml: xmlDoc}
+		if err := esquema.Validar(xmlDoc); err != nil {
+			reg.resuelto = true
+			reg.aut = ws.Autorizacion{Estado: ws.EstadoNoAutorizado, FechaAutorizacion: s.Ahora().Format("2006-01-02T15:04:05-07:00"),
+				Ambiente: "PRUEBAS", Comprobante: string(xmlDoc),
+				Mensajes: []ws.Mensaje{{Identificador: "35", Mensaje: "ARCHIVO NO CUMPLE ESTRUCTURA XML", InformacionAdicional: err.Error(), Tipo: "ERROR"}}}
+		}
+		if previo, ok := s.docs[id]; !ok || !previo.aut.Autorizado() {
+			s.docs[id] = reg
+		}
+		claves = append(claves, id)
+	}
+	s.lotes[l.Clave] = claves
+	io.WriteString(w, envolver("http://ec.gob.sri.ws.recepcion", "validarComprobante",
+		`<RespuestaRecepcionComprobante><estado>RECIBIDA</estado><comprobantes/></RespuestaRecepcionComprobante>`))
+}
+
+// autorizacionXML escribe el elemento <autorizacion> de un comprobante
+// resuelto.
+func autorizacionXML(a ws.Autorizacion) string {
+	var sb strings.Builder
+	sb.WriteString(`<autorizacion><estado>` + a.Estado + `</estado>`)
+	if a.NumeroAutorizacion != "" {
+		sb.WriteString(`<numeroAutorizacion>` + a.NumeroAutorizacion + `</numeroAutorizacion>`)
+	}
+	sb.WriteString(`<fechaAutorizacion>` + a.FechaAutorizacion + `</fechaAutorizacion><ambiente>` + a.Ambiente + `</ambiente>`)
+	sb.WriteString(`<comprobante><![CDATA[` + strings.ReplaceAll(a.Comprobante, "]]>", "]]]]><![CDATA[>") + `]]></comprobante>`)
+	sb.WriteString(mensajesXML(a.Mensajes) + `</autorizacion>`)
+	return sb.String()
+}
+
+// autorizacionLote responde a autorizacionComprobanteLote.
+func (s *Servidor) autorizacionLote(w http.ResponseWriter, claveLote string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.autorizaciones++
+	var sb strings.Builder
+	sb.WriteString(`<RespuestaAutorizacionLote><claveAccesoLoteConsultada>` + esc(claveLote) + `</claveAccesoLoteConsultada>`)
+	claves := s.lotes[claveLote]
+	var auts strings.Builder
+	n := 0
+	for _, c := range claves {
+		reg := s.docs[c]
+		if !reg.resuelto {
+			reg.consultas++
+			if reg.consultas > s.ConsultasEnProceso {
+				s.resolver(c, reg)
+			}
+		}
+		if reg.resuelto {
+			auts.WriteString(autorizacionXML(reg.aut))
+			n++
+		}
+	}
+	fmt.Fprintf(&sb, `<numeroComprobantesLote>%d</numeroComprobantesLote><autorizaciones>%s</autorizaciones></RespuestaAutorizacionLote>`, n, auts.String())
+	io.WriteString(w, envolver("http://ec.gob.sri.ws.autorizacion", "autorizacionComprobanteLote", sb.String()))
+}
+
 func (s *Servidor) resolver(claveAcceso string, r *registro) {
 	r.resuelto = true
 	ambiente := "PRUEBAS"
@@ -296,9 +417,13 @@ func (s *Servidor) resolver(claveAcceso string, r *registro) {
 }
 
 func (s *Servidor) autorizacion(w http.ResponseWriter, r *http.Request) {
-	claveAcceso, err := parametro(r, "claveAccesoComprobante")
+	nombre, claveAcceso, err := parametros(r, "claveAccesoComprobante", "claveAccesoLote")
 	if err != nil {
 		falla(w, err.Error())
+		return
+	}
+	if nombre == "claveAccesoLote" {
+		s.autorizacionLote(w, claveAcceso)
 		return
 	}
 	s.mu.Lock()
@@ -316,14 +441,7 @@ func (s *Servidor) autorizacion(w http.ResponseWriter, r *http.Request) {
 	if !ok || !reg.resuelto {
 		sb.WriteString(`<numeroComprobantes>0</numeroComprobantes><autorizaciones/>`)
 	} else {
-		a := reg.aut
-		sb.WriteString(`<numeroComprobantes>1</numeroComprobantes><autorizaciones><autorizacion><estado>` + a.Estado + `</estado>`)
-		if a.NumeroAutorizacion != "" {
-			sb.WriteString(`<numeroAutorizacion>` + a.NumeroAutorizacion + `</numeroAutorizacion>`)
-		}
-		sb.WriteString(`<fechaAutorizacion>` + a.FechaAutorizacion + `</fechaAutorizacion><ambiente>` + a.Ambiente + `</ambiente>`)
-		sb.WriteString(`<comprobante><![CDATA[` + strings.ReplaceAll(a.Comprobante, "]]>", "]]]]><![CDATA[>") + `]]></comprobante>`)
-		sb.WriteString(mensajesXML(a.Mensajes) + `</autorizacion></autorizaciones>`)
+		sb.WriteString(`<numeroComprobantes>1</numeroComprobantes><autorizaciones>` + autorizacionXML(reg.aut) + `</autorizaciones>`)
 	}
 	sb.WriteString(`</RespuestaAutorizacionComprobante>`)
 	io.WriteString(w, envolver("http://ec.gob.sri.ws.autorizacion", "autorizacionComprobante", sb.String()))

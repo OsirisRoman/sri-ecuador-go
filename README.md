@@ -99,6 +99,18 @@ if res.Autorizado() {
 
 `ride.Generar` admite los seis tipos de comprobante, incluye el código de barras de la clave de acceso y no necesita bibliotecas externas. Sin logotipo, su espacio queda reservado con la leyenda «NO TIENE LOGO», igual que en los RIDE del SRI (`SinLeyendaLogo` lo deja en blanco). Si recibe una autorización cuyo estado no es `AUTORIZADO`, devuelve `ride.ErrNoAutorizado`. El documento con validez tributaria sigue siendo el XML.
 
+## Envío por lotes
+
+```go
+lote := ws.Lote{ClaveAcceso: claveDelLote, RUC: ruc, Comprobantes: firmados} // hasta 50 y 500 kB
+rec, _ := servicios.ValidarLote(ctx, lote)
+if rec.Recibida() {
+    res, _ := servicios.AutorizacionLote(ctx, lote.ClaveAcceso) // una autorización por comprobante
+}
+```
+
+La clave del lote se genera como la de un comprobante (`clave.Generar`), con una serie y un secuencial que el emisor reserva para sus lotes. El SRI resuelve cada comprobante por separado.
+
 ## Pruebas sin conexión al SRI
 
 `sritest` levanta un SRI simulado que valida XSD y firma, y permite inyectar cortes de red y demoras de procesamiento:
