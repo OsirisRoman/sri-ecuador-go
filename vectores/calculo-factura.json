@@ -1,0 +1,212 @@
+[
+  {
+    "descripcion": "una línea con IVA 15 %",
+    "propina": "0.00",
+    "lineas": [
+      {
+        "cantidad": "2",
+        "precioUnitario": "1.75",
+        "descuento": "0.00",
+        "codigoPorcentajeIVA": "4",
+        "precioTotalSinImpuesto": "3.50",
+        "tarifa": "15",
+        "baseImponible": "3.50",
+        "valor": "0.53"
+      }
+    ],
+    "totalSinImpuestos": "3.50",
+    "totalDescuento": "0.00",
+    "totalConImpuestos": [
+      {
+        "codigoPorcentajeIVA": "4",
+        "baseImponible": "3.50",
+        "valor": "0.53"
+      }
+    ],
+    "importeTotal": "4.03"
+  },
+  {
+    "descripcion": "seis decimales y descuento; IVA 15 % y 0 %",
+    "propina": "0.00",
+    "lineas": [
+      {
+        "cantidad": "2.5",
+        "precioUnitario": "19.123456",
+        "descuento": "3.21",
+        "codigoPorcentajeIVA": "4",
+        "precioTotalSinImpuesto": "44.60",
+        "tarifa": "15",
+        "baseImponible": "44.60",
+        "valor": "6.69"
+      },
+      {
+        "cantidad": "3",
+        "precioUnitario": "12.50",
+        "descuento": "0.00",
+        "codigoPorcentajeIVA": "0",
+        "precioTotalSinImpuesto": "37.50",
+        "tarifa": "0",
+        "baseImponible": "37.50",
+        "valor": "0.00"
+      }
+    ],
+    "totalSinImpuestos": "82.10",
+    "totalDescuento": "3.21",
+    "totalConImpuestos": [
+      {
+        "codigoPorcentajeIVA": "4",
+        "baseImponible": "44.60",
+        "valor": "6.69"
+      },
+      {
+        "codigoPorcentajeIVA": "0",
+        "baseImponible": "37.50",
+        "valor": "0.00"
+      }
+    ],
+    "importeTotal": "88.79"
+  },
+  {
+    "descripcion": "redondeo mitad hacia arriba en la línea (0.005 → 0.01)",
+    "propina": "0.00",
+    "lineas": [
+      {
+        "cantidad": "1",
+        "precioUnitario": "0.005",
+        "descuento": "0.00",
+        "codigoPorcentajeIVA": "0",
+        "precioTotalSinImpuesto": "0.01",
+        "tarifa": "0",
+        "baseImponible": "0.01",
+        "valor": "0.00"
+      }
+    ],
+    "totalSinImpuestos": "0.01",
+    "totalDescuento": "0.00",
+    "totalConImpuestos": [
+      {
+        "codigoPorcentajeIVA": "0",
+        "baseImponible": "0.01",
+        "valor": "0.00"
+      }
+    ],
+    "importeTotal": "0.01"
+  },
+  {
+    "descripcion": "el IVA se calcula sobre la base acumulada del grupo, no sumando el de cada línea (3 × 0.33)",
+    "propina": "0.00",
+    "lineas": [
+      {
+        "cantidad": "1",
+        "precioUnitario": "0.33",
+        "descuento": "0.00",
+        "codigoPorcentajeIVA": "4",
+        "precioTotalSinImpuesto": "0.33",
+        "tarifa": "15",
+        "baseImponible": "0.33",
+        "valor": "0.05"
+      },
+      {
+        "cantidad": "1",
+        "precioUnitario": "0.33",
+        "descuento": "0.00",
+        "codigoPorcentajeIVA": "4",
+        "precioTotalSinImpuesto": "0.33",
+        "tarifa": "15",
+        "baseImponible": "0.33",
+        "valor": "0.05"
+      },
+      {
+        "cantidad": "1",
+        "precioUnitario": "0.33",
+        "descuento": "0.00",
+        "codigoPorcentajeIVA": "4",
+        "precioTotalSinImpuesto": "0.33",
+        "tarifa": "15",
+        "baseImponible": "0.33",
+        "valor": "0.05"
+      }
+    ],
+    "totalSinImpuestos": "0.99",
+    "totalDescuento": "0.00",
+    "totalConImpuestos": [
+      {
+        "codigoPorcentajeIVA": "4",
+        "baseImponible": "0.99",
+        "valor": "0.15"
+      }
+    ],
+    "importeTotal": "1.14"
+  },
+  {
+    "descripcion": "exento, no objeto, 5 % y propina",
+    "propina": "1.00",
+    "lineas": [
+      {
+        "cantidad": "1",
+        "precioUnitario": "8.00",
+        "descuento": "0.00",
+        "codigoPorcentajeIVA": "7",
+        "precioTotalSinImpuesto": "8.00",
+        "tarifa": "0",
+        "baseImponible": "8.00",
+        "valor": "0.00"
+      },
+      {
+        "cantidad": "1",
+        "precioUnitario": "4.00",
+        "descuento": "0.00",
+        "codigoPorcentajeIVA": "6",
+        "precioTotalSinImpuesto": "4.00",
+        "tarifa": "0",
+        "baseImponible": "4.00",
+        "valor": "0.00"
+      },
+      {
+        "cantidad": "10",
+        "precioUnitario": "1.10",
+        "descuento": "0.00",
+        "codigoPorcentajeIVA": "5",
+        "precioTotalSinImpuesto": "11.00",
+        "tarifa": "5",
+        "baseImponible": "11.00",
+        "valor": "0.55"
+      },
+      {
+        "cantidad": "1",
+        "precioUnitario": "10.00",
+        "descuento": "0.00",
+        "codigoPorcentajeIVA": "4",
+        "precioTotalSinImpuesto": "10.00",
+        "tarifa": "15",
+        "baseImponible": "10.00",
+        "valor": "1.50"
+      }
+    ],
+    "totalSinImpuestos": "33.00",
+    "totalDescuento": "0.00",
+    "totalConImpuestos": [
+      {
+        "codigoPorcentajeIVA": "7",
+        "baseImponible": "8.00",
+        "valor": "0.00"
+      },
+      {
+        "codigoPorcentajeIVA": "6",
+        "baseImponible": "4.00",
+        "valor": "0.00"
+      },
+      {
+        "codigoPorcentajeIVA": "5",
+        "baseImponible": "11.00",
+        "valor": "0.55"
+      },
+      {
+        "codigoPorcentajeIVA": "4",
+        "baseImponible": "10.00",
+        "valor": "1.50"
+      }
+    ],
+    "importeTotal": "36.05"
+  }
+]

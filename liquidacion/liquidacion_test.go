@@ -36,7 +36,7 @@ func base(t *testing.T, fecha comprobante.Fecha) *liquidacion.LiquidacionCompra 
 			ObligadoContabilidad:        "SI",
 			TipoIdentificacionProveedor: comprobante.IDCedula,
 			RazonSocialProveedor:        "PROVEEDOR DE PRUEBA",
-			IdentificacionProveedor:     "1710034065",
+			IdentificacionProveedor:     "1700000001",
 			DireccionProveedor:          "Vía a la Costa km 12",
 			Pagos:                       []comprobante.Pago{{FormaPago: comprobante.PagoSinSistemaFinanciero}},
 		},

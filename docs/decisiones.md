@@ -44,6 +44,14 @@ El SRI rechaza con el error 52 una retención cuyo porcentaje no coincide con el
 ## D13. RIDE con un generador de PDF propio
 El RIDE solo necesita texto, líneas, una imagen y un código de barras. En vez de añadir una biblioteca de PDF se escribió un generador mínimo (`internal/pdf`, unas 350 líneas): PDF 1.4, A4, fuentes base Helvetica y Helvetica-Bold sin incrustar (todo visor las trae), codificación WinAnsi, Code 128 y logotipo PNG/JPEG. Las métricas de las fuentes proceden de los archivos AFM que publica Adobe. Límites asumidos: los caracteres fuera de Windows-1252 se sustituyen por `?`, no hay PDF/A ni fuentes personalizadas, y el diseño sigue los modelos del Anexo 2 sin reproducirlos al píxel. `ride.Generar` se niega a producir el RIDE de una envoltura cuyo estado no sea `AUTORIZADO`.
 
+## D14. `valorDevolucionIva` positivo se rechaza
+El campo existe en los XSD y en los modelos, pero su valor lo autoriza un servicio que el SDK no implementa (DIG) y debe restarse del importe total (Anexo 20), cosa que `Calcular` no hace. Aceptarlo produciría comprobantes con el total mal calculado. En vez de quitar el campo (los modelos dejarían de leer documentos de terceros que lo traen), la validación rechaza los valores mayores que cero, y como `Preparar` valida antes de firmar, el flujo público no puede emitirlos. Se retirará cuando DIG esté implementado.
+
+## D15. Referencia abierta además de biblioteca
+La documentación separa las reglas del SRI de las decisiones de este SDK (`docs/referencia/`) y se acompaña de vectores de prueba (`vectores/`) que las pruebas del proyecto mantienen coherentes con el código, para que sirva a implementaciones en otros lenguajes. Lo que falta se documenta en `docs/pendientes.md` con el mismo cuidado que lo que funciona.
+
 ## Discrepancias abiertas
+Las que siguen están desarrolladas, con lo que falta para resolverlas, en `pendientes.md`.
+
 - **Nota de crédito y `valorDevolucionIva`:** el SRI publica dos XSD de nota de crédito incompatibles: `NotaCredito_V*` admite `agenteRetencion`/`contribuyenteRimpe` pero no `valorDevolucionIva`; `NOTA_CREDITO-*` hace lo contrario. El SDK usa el primero, con el que el SRI autorizó las pruebas. Falta determinar cómo se emite una nota de crédito con devolución de IVA. (El XSD de nota de débito `NotaDebito_V1.0.0` sí admite ambos.)
 - **Estados de autorización:** la ficha muestra `RECHAZADO` en un ejemplo; el servicio real responde `NO AUTORIZADO`. El cliente trata como no autorizado todo estado resuelto que no sea `AUTORIZADO`.

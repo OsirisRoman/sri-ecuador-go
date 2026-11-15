@@ -80,8 +80,8 @@ Que un servidor acepte el mensaje no garantiza la llegada a la bandeja de entrad
 - **Producción.** El ambiente de pruebas puede validar menos que producción.
 - **Otros certificados y emisores.** Solo un certificado (Banco Central del Ecuador) y un emisor (persona natural). Los certificados de otras entidades pueden tener emisores con atributos distintos en `X509IssuerName`.
 - **Factura:** ICE, IRBPNR, retenciones informativas, una factura confirmada como comercial negociable, sustitutiva de guía de remisión, combustibles y transporte comercial (sus reglas solo tienen pruebas locales). Tampoco la leyenda de negocio popular RIMPE, que requiere un emisor de ese régimen.
-- **Devolución automática de IVA (servicios DIG):** no está implementada ni se ha probado; ver `devolucion-iva-dig.md`.
-- **Nota de crédito:** versión 1.0.0 y `valorDevolucionIva`. **Nota de débito:** `valorDevolucionIva`.
+- **Devolución automática de IVA (servicios DIG):** no está implementada ni se ha probado; ver `devolucion-iva-dig.md`. El SDK rechaza un `valorDevolucionIva` mayor que cero.
+- **Nota de crédito:** versión 1.0.0.
 - **Retención:** ISD, pagos al exterior, dividendos, compra de banano y reembolsos.
 - **Guía de remisión:** varios destinatarios, documento aduanero y emisión anterior al día del traslado.
 - **Liquidación de compra:** reembolsos, proveedores del exterior y liquidación negociable.

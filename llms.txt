@@ -11,9 +11,16 @@ Módulo: `github.com/OsirisRoman/sri-ecuador-go`. Documentación en español.
 - [Instrucciones para asistentes de IA](AGENTS.md): resumen de lo esencial para usar o modificar el SDK.
 - [README](README.md): visión general y tabla de paquetes.
 
+## Protocolo (independiente del lenguaje)
+
+- [Referencia técnica](docs/referencia/README.md): clave de acceso, XML, cálculo, firma XAdES-BES y servicios web.
+- [Vectores de prueba](vectores/README.md)
+
 ## Referencia
 
-- [Capacidades y limitaciones](docs/capacidades.md)
+- [Capacidades y estado](docs/capacidades.md)
+- [Pendientes y oportunidades de contribución](docs/pendientes.md)
+- [Cómo contribuir](CONTRIBUTING.md)
 - [Pruebas contra el SRI real](docs/pruebas-sri.md)
 - [Decisiones de diseño](docs/decisiones.md)
 - [Datos que caducan y cómo actualizarlos](docs/actualizar-catalogos.md)

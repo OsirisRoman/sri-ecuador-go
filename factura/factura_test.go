@@ -252,7 +252,7 @@ func TestReglas(t *testing.T) {
 func TestCedulaValidaYConsumidorFinal(t *testing.T) {
 	f := base(t)
 	f.InfoFactura.TipoIdentificacionComprador = comprobante.IDCedula
-	f.InfoFactura.IdentificacionComprador = "1710034065"
+	f.InfoFactura.IdentificacionComprador = "1700000001"
 	if hs := validar(f); len(hs) != 0 {
 		t.Errorf("cédula válida rechazada: %v", hs)
 	}

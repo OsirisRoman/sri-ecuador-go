@@ -8,7 +8,7 @@ No bloquea el resto del SDK: los comprobantes se emiten sin estos servicios. Sol
 
 El emisor consulta al SRI, antes de emitir la factura o la nota de débito, cuánto IVA puede devolver al beneficiario; el SRI responde con el monto y el emisor lo declara en el comprobante. Según la información pública del SRI, el beneficio se aplica en establecimientos comerciales autorizados.
 
-Lo que el SDK **sí** admite hoy es el campo del comprobante: `valorDevolucionIva` en los totales de la factura y en los impuestos de la nota de débito (Anexo 20). El SDK no puede obtener ese valor del SRI; quien lo use debe conseguirlo por su cuenta. `Calcular` y `Validar` todavía no restan la devolución del importe total, como exige el Anexo 20, y el campo no se ha probado contra el SRI: hoy no es un flujo utilizable de extremo a extremo.
+El modelo incluye el campo del comprobante: `valorDevolucionIva` en los totales de la factura y en los impuestos de la nota de débito (Anexo 20). Pero **el SDK rechaza cualquier valor mayor que cero** (regla `devolucion-iva.no-admitida`): no puede obtener el monto del SRI y `Calcular` y `Validar` no restan la devolución del importe total, como exige el Anexo 20, de modo que aceptarlo produciría importes incorrectos. El campo solo puede omitirse o valer cero.
 
 ## Referencias oficiales
 
@@ -116,4 +116,11 @@ Resolverlo exige documentación adicional del SRI o pruebas con un emisor habili
 1. Confirmar con el SRI el requisito de habilitación y obtener un usuario adicional para el ambiente de certificación.
 2. Con esas credenciales (fuera del repositorio), fijar el formato de autenticación con el menor número de intentos posible.
 3. Implementar un paquete independiente, opcional como `correo`, que no añada dependencias al flujo de emisión; cubrirlo con un simulador y registrar en `pruebas-sri.md` lo que se compruebe contra el SRI.
-4. Conectar el monto obtenido con `valorDevolucionIva` y con el cálculo de totales (el importe total debe restar la devolución), y probar el comprobante resultante, incluido el código 92.
+4. Conectar el monto obtenido con `valorDevolucionIva` y con el cálculo de totales (el importe total debe restar la devolución), retirar la regla que hoy rechaza los valores positivos y probar el comprobante resultante, incluido el código 92. Ver también el pendiente 2 de [`pendientes.md`](pendientes.md).
+
+## Criterios para considerarlo terminado
+
+- Un paquete opcional obtiene el token y ejecuta los cinco servicios, con un simulador y pruebas automáticas.
+- Al menos la consulta individual y la anulación se han verificado contra el ambiente de certificación del SRI con un emisor habilitado, y el resultado está en `pruebas-sri.md`.
+- Una factura con `valorDevolucionIva` calculada por el SDK ha sido autorizada por el SRI.
+- La documentación describe el requisito de habilitación tal como lo haya confirmado el SRI.

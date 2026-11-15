@@ -16,6 +16,8 @@ Lo esencial, que no debes saltarte:
 - Nunca envíes a producción (`comprobante.Produccion`) sin que la persona responsable lo pida expresamente; desarrolla contra `sritest` o el ambiente de pruebas.
 - No pongas contraseñas, certificados `.p12` ni credenciales SMTP en el código, en los registros ni en el repositorio.
 - Los códigos de país son los de `comprobante.Paises` (tabla del SRI), no ISO 3166.
+- `valorDevolucionIva` debe omitirse o ser cero: la devolución automática de IVA (DIG) no está implementada y el SDK rechaza valores positivos.
+- Para pruebas automáticas use `sritest.Nuevo()` y `sritest.CertificadoDePrueba()`.
 
 ## Si vas a MODIFICAR el SDK
 
@@ -39,6 +41,9 @@ gofmt -l <directorios del proyecto>  # no ejecutes gofmt sobre "." si existe res
 | Cómo integrar | `docs/guia-de-integracion.md` |
 | Ejemplo ejecutable | `ejemplos/emision/main.go`, `example_test.go` |
 | Qué está implementado y sus límites | `docs/capacidades.md` |
+| Qué falta y cómo continuarlo | `docs/pendientes.md` |
+| Protocolo del SRI, independiente del lenguaje | `docs/referencia/`, `vectores/` |
+| Normas para contribuir | `CONTRIBUTING.md` |
 | Qué se ha probado contra el SRI | `docs/pruebas-sri.md` |
 | Decisiones de diseño | `docs/decisiones.md` |
 | Datos que caducan y cómo actualizarlos | `docs/actualizar-catalogos.md` |
