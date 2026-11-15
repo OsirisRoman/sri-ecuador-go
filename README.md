@@ -80,6 +80,7 @@ Un ejemplo ejecutable completo está en [`example_test.go`](example_test.go).
 | `xades` | Firma y verificación XAdES-BES |
 | `ws` | Clientes SOAP: recepción, autorización, consulta de validez |
 | `sritest` | Simulador del SRI para pruebas sin conexión |
+| `correo` | Opcional: entrega del comprobante autorizado por SMTP |
 | `cmd/sri` | Herramienta de línea de comandos |
 
 ## Pruebas sin conexión al SRI

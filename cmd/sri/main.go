@@ -9,21 +9,25 @@ package main
 
 import (
 	"context"
+	"encoding/xml"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	sri "github.com/OsirisRoman/sri-ecuador-go"
 	"github.com/OsirisRoman/sri-ecuador-go/certificado"
 	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
+	"github.com/OsirisRoman/sri-ecuador-go/correo"
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
 	"github.com/OsirisRoman/sri-ecuador-go/esquema"
 	"github.com/OsirisRoman/sri-ecuador-go/factura"
 	"github.com/OsirisRoman/sri-ecuador-go/internal/entorno"
+	"github.com/OsirisRoman/sri-ecuador-go/notacredito"
 	"github.com/OsirisRoman/sri-ecuador-go/xades"
 )
 
@@ -40,6 +44,10 @@ const uso = `Uso: sri <orden> [opciones]
   enviar   <firmado.xml>   Envía un comprobante firmado y espera su autorización
   autorizacion <clave>     Consulta la autorización de una clave de acceso
   estado <clave>           Consulta de validez (AUTORIZADO, ANULADO, …)
+
+Correo (opcional; variables SMTP_*):
+  correo <autorizado.xml>  Compone el correo de entrega de un comprobante autorizado;
+                           con -enviar lo envía a -para (por defecto SMTP_TEST_TO)
 
 Configuración (variables de entorno o archivo .env; ver .env.example):
   SRI_P12_PATH, SRI_P12_PASSWORD o SRI_P12_PASSWORD_FILE, SRI_EMISOR_*
@@ -69,6 +77,8 @@ func main() {
 		err = cmdAutorizacion(args)
 	case "estado":
 		err = cmdEstado(args)
+	case "correo":
+		err = cmdCorreo(args)
 	case "-h", "--help", "ayuda":
 		fmt.Print(uso)
 	default:
@@ -355,5 +365,85 @@ func cmdEstado(args []string) error {
 	for _, m := range e.Mensajes {
 		fmt.Printf("  %s %s\n", m.Tipo, m)
 	}
+	return nil
+}
+
+// cmdCorreo compone, y con -enviar envía, el correo de entrega de un
+// comprobante autorizado.
+func cmdCorreo(args []string) error {
+	fs := flag.NewFlagSet("correo", flag.ExitOnError)
+	para := fs.String("para", os.Getenv("SMTP_TEST_TO"), "destinatario (por defecto SMTP_TEST_TO)")
+	enviar := fs.Bool("enviar", false, "envía el correo por el servidor SMTP configurado (sin esta opción solo se compone)")
+	salida := fs.String("salida", "", "guarda el mensaje compuesto (.eml) en este archivo")
+	fs.Parse(args)
+	doc, _, err := leerArg(fs.Args())
+	if err != nil {
+		return err
+	}
+	var aut struct {
+		Estado      string `xml:"estado"`
+		Comprobante string `xml:"comprobante"`
+	}
+	if err := xml.Unmarshal(doc, &aut); err != nil || aut.Estado != "AUTORIZADO" || aut.Comprobante == "" {
+		return errors.New("el archivo no es un comprobante AUTORIZADO (use el .autorizado.xml)")
+	}
+	datos := correo.Comprobante{XML: doc}
+	tipo, _, err := esquema.Identificar([]byte(aut.Comprobante))
+	if err != nil {
+		return err
+	}
+	switch tipo {
+	case esquema.Factura:
+		f, err := factura.Parse([]byte(aut.Comprobante))
+		if err != nil {
+			return err
+		}
+		datos.Tipo, datos.Numero, datos.ClaveAcceso = "Factura", f.InfoTributaria.NumeroComprobante(), f.InfoTributaria.ClaveAcceso
+		datos.Emisor, datos.Receptor = f.InfoTributaria.RazonSocial, f.InfoFactura.RazonSocialComprador
+	case esquema.NotaCredito:
+		n, err := notacredito.Parse([]byte(aut.Comprobante))
+		if err != nil {
+			return err
+		}
+		datos.Tipo, datos.Numero, datos.ClaveAcceso = "Nota de crédito", n.InfoTributaria.NumeroComprobante(), n.InfoTributaria.ClaveAcceso
+		datos.Emisor, datos.Receptor = n.InfoTributaria.RazonSocial, n.InfoNotaCredito.RazonSocialComprador
+	default:
+		return fmt.Errorf("tipo de comprobante %q aún no admitido para correo", tipo)
+	}
+	puerto, _ := strconv.Atoi(entorno.Valor("SMTP_PORT", "587"))
+	cli, err := correo.Nuevo(correo.Config{
+		Host: os.Getenv("SMTP_HOST"), Puerto: puerto, Seguridad: correo.Seguridad(strings.ToLower(os.Getenv("SMTP_TLS"))),
+		Usuario: os.Getenv("SMTP_USER"), Contrasena: os.Getenv("SMTP_PASSWORD"),
+		Remitente: os.Getenv("SMTP_FROM"), NombreRemitente: datos.Emisor,
+	})
+	if err != nil {
+		return err
+	}
+	if *para == "" {
+		return errors.New("indique -para o defina SMTP_TEST_TO")
+	}
+	m := correo.DeComprobante(datos)
+	m.Para = []string{*para}
+	eml, err := cli.Componer(m)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("asunto: %s\nadjuntos: %d\ntamaño: %d bytes\n", m.Asunto, len(m.Adjuntos), len(eml))
+	if *salida != "" {
+		if err := os.WriteFile(*salida, eml, 0o600); err != nil {
+			return err
+		}
+		fmt.Println("mensaje guardado en", *salida)
+	}
+	if !*enviar {
+		fmt.Println("no se envió nada (añada -enviar para hacerlo)")
+		return nil
+	}
+	ctx, cancelar := context.WithTimeout(context.Background(), time.Minute)
+	defer cancelar()
+	if err := cli.Enviar(ctx, m); err != nil {
+		return err
+	}
+	fmt.Println("correo aceptado por el servidor SMTP")
 	return nil
 }
