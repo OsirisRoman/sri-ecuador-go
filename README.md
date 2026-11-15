@@ -84,8 +84,20 @@ Un ejemplo ejecutable completo está en [`example_test.go`](example_test.go).
 | `xades` | Firma y verificación XAdES-BES |
 | `ws` | Clientes SOAP: recepción, autorización, consulta de validez |
 | `sritest` | Simulador del SRI para pruebas sin conexión |
-| `correo` | Opcional: entrega del comprobante autorizado por SMTP |
+| `ride` | Representación impresa (RIDE) en PDF de cualquier comprobante |
+| `correo` | Opcional: entrega del comprobante autorizado (XML y RIDE) por SMTP |
 | `cmd/sri` | Herramienta de línea de comandos |
+
+## RIDE (PDF)
+
+```go
+res, _ := cliente.Emitir(ctx, f)
+if res.Autorizado() {
+    pdf, err := ride.Generar(res.XMLAutorizado(), &ride.Opciones{Logo: logoPNG})
+}
+```
+
+`ride.Generar` admite los seis tipos de comprobante, incluye el código de barras de la clave de acceso y no necesita bibliotecas externas. Si recibe una autorización cuyo estado no es `AUTORIZADO`, devuelve `ride.ErrNoAutorizado`. El documento con validez tributaria sigue siendo el XML.
 
 ## Pruebas sin conexión al SRI
 
@@ -106,6 +118,7 @@ go run ./cmd/sri certificado            # comprueba el .p12 sin enviar nada
 go run ./cmd/sri validar factura.xml    # XSD oficial
 go run ./cmd/sri firmar factura.xml
 go run ./cmd/sri verificar factura.firmado.xml
+go run ./cmd/sri ride -logo logo.png factura.autorizado.xml   # RIDE en PDF
 ```
 
 ## Mantenimiento: datos que caducan

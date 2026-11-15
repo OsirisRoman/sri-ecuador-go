@@ -130,6 +130,19 @@ Qué **no** demuestran estas rondas:
 - No se ha observado un comprobante en procesamiento prolongado ni el error 70.
 - Solo el ambiente de pruebas, que puede validar menos que producción.
 
+## RIDE
+
+Los RIDE no se envían al SRI; lo que sigue son comprobaciones locales sobre los comprobantes autorizados en las rondas anteriores (2026-11-15).
+
+| Qué | Con qué | Resultado |
+|---|---|---|
+| RIDE de factura, nota de crédito, nota de débito, retención, guía de remisión y liquidación de compra | `ride.Generar` sobre los XML autorizados | Seis PDF de una página, de 3 a 4 KB |
+| El PDF es válido y se ve como se espera | Dos visores independientes: poppler (`pdfinfo`, `pdftoppm`) y MuPDF (`mutool`), más revisión visual | Sin errores; contenido, tablas y totales correctos |
+| El código de barras es legible | Lector zbar (`zbarimg`) sobre el PDF rasterizado a 300 ppp | Code 128 leído en los seis; coincide con la clave de acceso impresa |
+| Correo con RIDE adjunto | Mensaje compuesto sin enviar | Dos adjuntos: XML y PDF |
+
+No se ha impreso en papel ni se ha leído el código con un lector físico. No se ha enviado todavía un correo real con el RIDE adjunto.
+
 ## Correo
 
 | Qué | Con qué | Resultado |

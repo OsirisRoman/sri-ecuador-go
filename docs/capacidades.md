@@ -25,6 +25,6 @@ Leyenda: ✅ implementado y probado · 🚧 parcial · ⏳ pendiente.
 | Comprobante de retención v2.0.0 (ATS) | ✅ | Modelo completo, cálculo y validación; tablas de retención de IVA y de renta (Catálogo ATS, 127 conceptos; **caduca**, ver `actualizar-catalogos.md`). **Autorizado** en el ambiente de pruebas. La v1.0.0 no se modela |
 | Guía de remisión v1.0.0 / 1.1.0 | ✅ | Modelo, clave de acceso (fecha de emisión distinta del inicio del transporte), validación. **Autorizada** en el ambiente de pruebas |
 | Liquidación de compra v1.0.0 / 1.1.0 | ✅ | Modelo, totales (incluidos los de reembolso) y validación; **autorizada** en el ambiente de pruebas. Reembolsos sin probar contra el SRI |
-| RIDE (representación impresa) | ⏳ | |
-| Envío por correo (`correo`) | 🚧 | Paquete opcional, solo biblioteca estándar. STARTTLS/TLS obligatorios fuera de localhost. Probado contra Mailpit y con un servidor SMTP real (STARTTLS); adjunta el XML autorizado (el RIDE cuando exista) |
+| RIDE (representación impresa, PDF) | ✅ | Los seis comprobantes, según los modelos del Anexo 2. Generador propio sin dependencias; código de barras Code 128 verificado con un lector (zbar); logotipo PNG/JPEG; paginación. Sin fuentes incrustadas ni PDF/A; caracteres fuera de Windows-1252 se sustituyen |
+| Envío por correo (`correo`) | 🚧 | Paquete opcional, solo biblioteca estándar. STARTTLS/TLS obligatorios fuera de localhost. Probado contra Mailpit y con un servidor SMTP real (STARTTLS); adjunta el XML autorizado y el RIDE |
 | Devolución de IVA (servicios DIG, sección 13) | ⏳ | |
