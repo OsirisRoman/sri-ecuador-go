@@ -1,0 +1,26 @@
+sri-ecuador-go
+Copyright 2026 Los autores de sri-ecuador-go
+
+Este producto incluye material de terceros:
+
+1. Esquemas XSD de comprobantes electrónicos (esquema/xsd/*.xsd, excepto
+   xmldsig-core-schema.xsd) y documentos XML de ejemplo (esquema/testdata/),
+   publicados por el Servicio de Rentas Internas del Ecuador en
+   https://www.sri.gob.ec/facturacion-electronica. Se distribuyen sin
+   modificación; ver esquema/xsd/PROCEDENCIA.md.
+
+2. xmldsig-core-schema.xsd
+   Copyright 2001 The Internet Society and W3C (Massachusetts Institute of
+   Technology, Institut National de Recherche en Informatique et en
+   Automatique, Keio University). All Rights Reserved.
+   Distribuido bajo la W3C Software License:
+   http://www.w3.org/Consortium/Legal/copyright-software-19980720
+
+Dependencias de ejecución (no incluidas en este repositorio):
+
+- github.com/cB-Sigma/xsd — Apache License 2.0
+- software.sslmate.com/src/go-pkcs12 — BSD 3-Clause
+- golang.org/x/crypto — BSD 3-Clause
+
+Este proyecto no está afiliado al Servicio de Rentas Internas ni cuenta con
+su respaldo.

@@ -1,0 +1,574 @@
+// Package xmldom es un árbol XML mínimo que conserva lo que la firma
+// electrónica necesita y encoding/xml descarta: los prefijos tal como se
+// escribieron y las declaraciones de espacios de nombres de cada elemento.
+//
+// Incluye la canonicalización C14N 1.0 inclusiva (REC-xml-c14n-20010315),
+// con y sin el elemento excluido que requiere la transformación
+// enveloped-signature de XMLDSig.
+//
+// Restricciones deliberadas de seguridad: se rechazan los documentos con
+// DOCTYPE (sin DTD no hay entidades externas ni expansión exponencial) y se
+// limitan la profundidad y el tamaño.
+package xmldom
+
+import (
+	"bytes"
+	"encoding/xml"
+	"errors"
+	"fmt"
+	"io"
+	"sort"
+	"strings"
+)
+
+// Límites de análisis para documentos de procedencia no confiable.
+const (
+	MaxProfundidad = 128
+	MaxBytes       = 8 << 20 // el SRI admite 320 kB por comprobante y ~512 kB por lote
+)
+
+// Errores de análisis.
+var (
+	ErrDoctype     = errors.New("xml: no se admiten documentos con DOCTYPE")
+	ErrDemasiado   = errors.New("xml: el documento supera los límites de tamaño o profundidad")
+	ErrMalFormado  = errors.New("xml: documento mal formado")
+	ErrPrefijoNoNS = errors.New("xml: prefijo sin espacio de nombres declarado")
+)
+
+// Atributo es un atributo que no es declaración de espacio de nombres.
+type Atributo struct {
+	Prefijo, Local, Valor string
+}
+
+// Nodo es un hijo de un elemento: *Elemento, Texto o InstruccionProc.
+type Nodo interface{ nodo() }
+
+// Texto es contenido de caracteres ya decodificado (sin entidades).
+type Texto string
+
+// InstruccionProc es una instrucción de procesamiento <?destino datos?>.
+type InstruccionProc struct{ Destino, Datos string }
+
+// Elemento es un elemento XML.
+type Elemento struct {
+	Prefijo, Local string
+	// NS son las declaraciones xmlns hechas en este elemento: prefijo → URI.
+	// El prefijo "" es el espacio de nombres por defecto.
+	NS    map[string]string
+	Attrs []Atributo
+	Hijos []Nodo
+	Padre *Elemento
+}
+
+func (*Elemento) nodo()       {}
+func (Texto) nodo()           {}
+func (InstruccionProc) nodo() {}
+
+// Documento es un documento XML analizado.
+type Documento struct {
+	Raiz *Elemento
+}
+
+// Analizar construye el árbol de un documento XML.
+func Analizar(datos []byte) (*Documento, error) {
+	if len(datos) > MaxBytes {
+		return nil, ErrDemasiado
+	}
+	dec := xml.NewDecoder(bytes.NewReader(datos))
+	dec.Strict = true
+	// Solo UTF-8 (y su subconjunto ASCII): es la codificación que exige la
+	// ficha técnica; cualquier otra se rechaza en vez de adivinarse.
+	dec.CharsetReader = func(cs string, in io.Reader) (io.Reader, error) {
+		switch strings.ToLower(cs) {
+		case "utf-8", "utf8", "us-ascii", "ascii":
+			return in, nil
+		}
+		return nil, fmt.Errorf("%w: codificación %q no admitida, use UTF-8", ErrMalFormado, cs)
+	}
+	var doc Documento
+	var actual *Elemento
+	prof := 0
+	for {
+		tok, err := dec.RawToken()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrMalFormado, err)
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if prof++; prof > MaxProfundidad {
+				return nil, ErrDemasiado
+			}
+			if actual == nil && doc.Raiz != nil {
+				return nil, fmt.Errorf("%w: más de un elemento raíz", ErrMalFormado)
+			}
+			e := &Elemento{Prefijo: t.Name.Space, Local: t.Name.Local, Padre: actual}
+			for _, a := range t.Attr {
+				switch {
+				case a.Name.Space == "" && a.Name.Local == "xmlns":
+					e.declarar("", a.Value)
+				case a.Name.Space == "xmlns":
+					if a.Value == "" {
+						return nil, fmt.Errorf("%w: xmlns:%s vacío", ErrMalFormado, a.Name.Local)
+					}
+					e.declarar(a.Name.Local, a.Value)
+				default:
+					e.Attrs = append(e.Attrs, Atributo{Prefijo: a.Name.Space, Local: a.Name.Local, Valor: a.Value})
+				}
+			}
+			if actual == nil {
+				doc.Raiz = e
+			} else {
+				actual.Hijos = append(actual.Hijos, e)
+			}
+			actual = e
+		case xml.EndElement:
+			if actual == nil || actual.Prefijo != t.Name.Space || actual.Local != t.Name.Local {
+				return nil, fmt.Errorf("%w: cierre </%s> inesperado", ErrMalFormado, t.Name.Local)
+			}
+			actual = actual.Padre
+			prof--
+		case xml.CharData:
+			if actual != nil {
+				// Los fragmentos contiguos (texto + CDATA) se fusionan.
+				if n := len(actual.Hijos); n > 0 {
+					if prev, ok := actual.Hijos[n-1].(Texto); ok {
+						actual.Hijos[n-1] = prev + Texto(t)
+						continue
+					}
+				}
+				actual.Hijos = append(actual.Hijos, Texto(t))
+			} else if len(bytes.TrimSpace(t)) != 0 {
+				return nil, fmt.Errorf("%w: texto fuera del elemento raíz", ErrMalFormado)
+			}
+		case xml.ProcInst:
+			if actual != nil && t.Target != "xml" {
+				actual.Hijos = append(actual.Hijos, InstruccionProc{Destino: t.Target, Datos: string(t.Inst)})
+			}
+		case xml.Directive:
+			return nil, ErrDoctype
+		case xml.Comment:
+			// Los comentarios no forman parte de la forma canónica sin
+			// comentarios, que es la única que usa el SRI.
+		}
+	}
+	if doc.Raiz == nil || actual != nil {
+		return nil, fmt.Errorf("%w: documento incompleto", ErrMalFormado)
+	}
+	if err := doc.Raiz.comprobarPrefijos(); err != nil {
+		return nil, err
+	}
+	return &doc, nil
+}
+
+func (e *Elemento) declarar(prefijo, uri string) {
+	if e.NS == nil {
+		e.NS = map[string]string{}
+	}
+	e.NS[prefijo] = uri
+}
+
+func (e *Elemento) comprobarPrefijos() error {
+	if e.Prefijo != "" {
+		if _, ok := e.ResolverPrefijo(e.Prefijo); !ok {
+			return fmt.Errorf("%w: %s:%s", ErrPrefijoNoNS, e.Prefijo, e.Local)
+		}
+	}
+	for _, a := range e.Attrs {
+		if a.Prefijo != "" {
+			if _, ok := e.ResolverPrefijo(a.Prefijo); !ok {
+				return fmt.Errorf("%w: atributo %s:%s", ErrPrefijoNoNS, a.Prefijo, a.Local)
+			}
+		}
+	}
+	for _, h := range e.Hijos {
+		if he, ok := h.(*Elemento); ok {
+			if err := he.comprobarPrefijos(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// XMLNamespace es el espacio de nombres reservado del prefijo xml.
+const XMLNamespace = "http://www.w3.org/XML/1998/namespace"
+
+// ResolverPrefijo devuelve el URI ligado a un prefijo en el ámbito de e.
+func (e *Elemento) ResolverPrefijo(prefijo string) (string, bool) {
+	if prefijo == "xml" {
+		return XMLNamespace, true
+	}
+	for x := e; x != nil; x = x.Padre {
+		if uri, ok := x.NS[prefijo]; ok {
+			return uri, true
+		}
+	}
+	return "", prefijo == ""
+}
+
+// Espacio devuelve el URI del espacio de nombres del elemento.
+func (e *Elemento) Espacio() string {
+	uri, _ := e.ResolverPrefijo(e.Prefijo)
+	return uri
+}
+
+// Es informa si el elemento tiene ese espacio de nombres y nombre local.
+func (e *Elemento) Es(espacio, local string) bool {
+	return e.Local == local && e.Espacio() == espacio
+}
+
+// Attr devuelve el valor de un atributo sin prefijo.
+func (e *Elemento) Attr(local string) (string, bool) {
+	for _, a := range e.Attrs {
+		if a.Prefijo == "" && a.Local == local {
+			return a.Valor, true
+		}
+	}
+	return "", false
+}
+
+// FijarAttr crea o reemplaza un atributo sin prefijo.
+func (e *Elemento) FijarAttr(local, valor string) {
+	for i, a := range e.Attrs {
+		if a.Prefijo == "" && a.Local == local {
+			e.Attrs[i].Valor = valor
+			return
+		}
+	}
+	e.Attrs = append(e.Attrs, Atributo{Local: local, Valor: valor})
+}
+
+// Elementos devuelve los hijos que son elementos.
+func (e *Elemento) Elementos() []*Elemento {
+	var out []*Elemento
+	for _, h := range e.Hijos {
+		if he, ok := h.(*Elemento); ok {
+			out = append(out, he)
+		}
+	}
+	return out
+}
+
+// Hijo devuelve el primer hijo directo con ese espacio y nombre, o nil.
+func (e *Elemento) Hijo(espacio, local string) *Elemento {
+	for _, h := range e.Hijos {
+		if he, ok := h.(*Elemento); ok && he.Es(espacio, local) {
+			return he
+		}
+	}
+	return nil
+}
+
+// Ruta desciende por una cadena de hijos del mismo espacio de nombres.
+func (e *Elemento) Ruta(espacio string, locales ...string) *Elemento {
+	x := e
+	for _, l := range locales {
+		if x = x.Hijo(espacio, l); x == nil {
+			return nil
+		}
+	}
+	return x
+}
+
+// TextoPlano concatena el texto directo del elemento.
+func (e *Elemento) TextoPlano() string {
+	var sb strings.Builder
+	for _, h := range e.Hijos {
+		if t, ok := h.(Texto); ok {
+			sb.WriteString(string(t))
+		}
+	}
+	return sb.String()
+}
+
+// Agregar añade un hijo al final y fija su padre.
+func (e *Elemento) Agregar(h *Elemento) *Elemento {
+	h.Padre = e
+	e.Hijos = append(e.Hijos, h)
+	return h
+}
+
+// Quitar elimina un hijo directo; informa si lo encontró.
+func (e *Elemento) Quitar(h *Elemento) bool {
+	for i, x := range e.Hijos {
+		if x == Nodo(h) {
+			e.Hijos = append(e.Hijos[:i:i], e.Hijos[i+1:]...)
+			h.Padre = nil
+			return true
+		}
+	}
+	return false
+}
+
+// Recorrer visita e y todos sus descendientes en orden de documento; si f
+// devuelve false no se desciende por ese elemento.
+func (e *Elemento) Recorrer(f func(*Elemento) bool) {
+	if !f(e) {
+		return
+	}
+	for _, h := range e.Hijos {
+		if he, ok := h.(*Elemento); ok {
+			he.Recorrer(f)
+		}
+	}
+}
+
+// BuscarPorID devuelve los elementos cuyo atributo Id, ID o id (sin
+// prefijo) vale id. XMLDSig referencia fragmentos con URI="#id"; sin DTD no
+// hay atributos de tipo ID declarados, así que se aplica esta convención,
+// que es la del SRI (id="comprobante") y la de XAdES (Id="...").
+//
+// Se devuelven todas las coincidencias para que quien verifica pueda
+// rechazar identificadores duplicados (defensa frente a ataques de
+// envoltura de firma).
+func (e *Elemento) BuscarPorID(id string) []*Elemento {
+	var out []*Elemento
+	e.Recorrer(func(x *Elemento) bool {
+		for _, a := range x.Attrs {
+			if a.Prefijo == "" && (a.Local == "Id" || a.Local == "ID" || a.Local == "id") && a.Valor == id {
+				out = append(out, x)
+				break
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// ---------------------------------------------------------------------------
+// Canonicalización
+
+// Canonicalizar devuelve la forma canónica C14N 1.0 inclusiva, sin
+// comentarios, del subárbol con vértice en e. Como exige la recomendación
+// para subconjuntos de documento, el vértice hereda los espacios de nombres
+// y los atributos xml:* visibles desde sus ancestros.
+//
+// Si excluir no es nil, ese elemento y sus descendientes se omiten: es el
+// efecto de la transformación enveloped-signature.
+func Canonicalizar(e *Elemento, excluir *Elemento) []byte {
+	var buf bytes.Buffer
+	// Espacios de nombres en ámbito para el vértice.
+	enAmbito := map[string]string{}
+	var cadena []*Elemento
+	for x := e; x != nil; x = x.Padre {
+		cadena = append(cadena, x)
+	}
+	for i := len(cadena) - 1; i >= 0; i-- {
+		for p, u := range cadena[i].NS {
+			enAmbito[p] = u
+		}
+	}
+	// Atributos xml:* heredados (xml:lang, xml:space, ...).
+	var heredados []Atributo
+	for i := 1; i < len(cadena); i++ { // del padre hacia la raíz
+		for _, a := range cadena[i].Attrs {
+			if a.Prefijo != "xml" {
+				continue
+			}
+			ya := false
+			for _, h := range heredados {
+				if h.Local == a.Local {
+					ya = true
+				}
+			}
+			for _, propio := range e.Attrs {
+				if propio.Prefijo == "xml" && propio.Local == a.Local {
+					ya = true
+				}
+			}
+			if !ya {
+				heredados = append(heredados, a)
+			}
+		}
+	}
+	canon(&buf, e, excluir, enAmbito, map[string]string{}, heredados)
+	return buf.Bytes()
+}
+
+// canon escribe e. enAmbito son los espacios visibles en e (incluidos los
+// propios); emitidos, los que ya quedaron escritos por un ancestro dentro de
+// la salida.
+func canon(buf *bytes.Buffer, e, excluir *Elemento, enAmbito, emitidos map[string]string, extra []Atributo) {
+	nombre := e.Local
+	if e.Prefijo != "" {
+		nombre = e.Prefijo + ":" + e.Local
+	}
+	buf.WriteByte('<')
+	buf.WriteString(nombre)
+
+	// Declaraciones de espacios de nombres: todo lo que está en ámbito y no
+	// fue emitido con el mismo valor por el ancestro de salida más cercano.
+	misEmitidos := emitidos
+	var prefijos []string
+	for p, u := range enAmbito {
+		if p == "xml" {
+			continue
+		}
+		if prev, ok := emitidos[p]; ok && prev == u {
+			continue
+		}
+		if p == "" && u == "" {
+			// xmlns="" solo se escribe para anular un valor por defecto
+			// no vacío ya emitido.
+			if prev, ok := emitidos[""]; !ok || prev == "" {
+				continue
+			}
+		}
+		prefijos = append(prefijos, p)
+	}
+	if len(prefijos) > 0 {
+		sort.Strings(prefijos) // "" (xmlns por defecto) ordena primero
+		misEmitidos = make(map[string]string, len(emitidos)+len(prefijos))
+		for p, u := range emitidos {
+			misEmitidos[p] = u
+		}
+		for _, p := range prefijos {
+			u := enAmbito[p]
+			misEmitidos[p] = u
+			if p == "" {
+				buf.WriteString(` xmlns="`)
+			} else {
+				buf.WriteString(" xmlns:" + p + `="`)
+			}
+			escAttr(buf, u)
+			buf.WriteByte('"')
+		}
+	}
+
+	// Atributos ordenados por (URI del espacio de nombres, nombre local);
+	// los que no tienen prefijo no tienen espacio y van primero.
+	type attrOrd struct {
+		uri string
+		a   Atributo
+	}
+	attrs := make([]attrOrd, 0, len(e.Attrs)+len(extra))
+	for _, a := range append(append([]Atributo(nil), e.Attrs...), extra...) {
+		uri := ""
+		if a.Prefijo == "xml" {
+			uri = XMLNamespace
+		} else if a.Prefijo != "" {
+			uri = enAmbito[a.Prefijo]
+		}
+		attrs = append(attrs, attrOrd{uri, a})
+	}
+	sort.SliceStable(attrs, func(i, j int) bool {
+		if attrs[i].uri != attrs[j].uri {
+			return attrs[i].uri < attrs[j].uri
+		}
+		return attrs[i].a.Local < attrs[j].a.Local
+	})
+	for _, x := range attrs {
+		buf.WriteByte(' ')
+		if x.a.Prefijo != "" {
+			buf.WriteString(x.a.Prefijo + ":")
+		}
+		buf.WriteString(x.a.Local)
+		buf.WriteString(`="`)
+		escAttr(buf, x.a.Valor)
+		buf.WriteByte('"')
+	}
+	buf.WriteByte('>')
+
+	for _, h := range e.Hijos {
+		switch n := h.(type) {
+		case Texto:
+			escTexto(buf, string(n))
+		case InstruccionProc:
+			buf.WriteString("<?" + n.Destino)
+			if n.Datos != "" {
+				buf.WriteString(" " + n.Datos)
+			}
+			buf.WriteString("?>")
+		case *Elemento:
+			if n == excluir {
+				continue
+			}
+			ambitoHijo := enAmbito
+			if len(n.NS) > 0 {
+				ambitoHijo = make(map[string]string, len(enAmbito)+len(n.NS))
+				for p, u := range enAmbito {
+					ambitoHijo[p] = u
+				}
+				for p, u := range n.NS {
+					ambitoHijo[p] = u
+				}
+			}
+			canon(buf, n, excluir, ambitoHijo, misEmitidos, nil)
+		}
+	}
+	buf.WriteString("</" + nombre + ">")
+}
+
+func escTexto(buf *bytes.Buffer, s string) {
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; c {
+		case '&':
+			buf.WriteString("&amp;")
+		case '<':
+			buf.WriteString("&lt;")
+		case '>':
+			buf.WriteString("&gt;")
+		case '\r':
+			buf.WriteString("&#xD;")
+		default:
+			buf.WriteByte(c)
+		}
+	}
+}
+
+func escAttr(buf *bytes.Buffer, s string) {
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; c {
+		case '&':
+			buf.WriteString("&amp;")
+		case '<':
+			buf.WriteString("&lt;")
+		case '"':
+			buf.WriteString("&quot;")
+		case '\t':
+			buf.WriteString("&#x9;")
+		case '\n':
+			buf.WriteString("&#xA;")
+		case '\r':
+			buf.WriteString("&#xD;")
+		default:
+			buf.WriteByte(c)
+		}
+	}
+}
+
+// Serializar escribe el documento completo con declaración XML. El cuerpo se
+// emite en forma canónica: es una serialización XML válida y estable, y
+// garantiza que lo que se envía es byte a byte lo que se firmó.
+func (d *Documento) Serializar() []byte {
+	var buf bytes.Buffer
+	buf.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
+	buf.Write(Canonicalizar(d.Raiz, nil))
+	return buf.Bytes()
+}
+
+// Nuevo crea un elemento suelto.
+func Nuevo(prefijo, local string) *Elemento {
+	return &Elemento{Prefijo: prefijo, Local: local}
+}
+
+// ConTexto añade texto al elemento y lo devuelve.
+func (e *Elemento) ConTexto(s string) *Elemento {
+	e.Hijos = append(e.Hijos, Texto(s))
+	return e
+}
+
+// ConAttr añade un atributo sin prefijo y devuelve el elemento.
+func (e *Elemento) ConAttr(local, valor string) *Elemento {
+	e.Attrs = append(e.Attrs, Atributo{Local: local, Valor: valor})
+	return e
+}
+
+// ConNS declara un espacio de nombres y devuelve el elemento.
+func (e *Elemento) ConNS(prefijo, uri string) *Elemento {
+	e.declarar(prefijo, uri)
+	return e
+}
