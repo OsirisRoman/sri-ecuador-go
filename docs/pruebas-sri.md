@@ -78,6 +78,15 @@ Qué **no** demuestran estas rondas:
 - No se ha observado un comprobante en procesamiento prolongado ni el error 70.
 - Solo el ambiente de pruebas, que puede validar menos que producción.
 
+## Correo
+
+| Qué | Con qué | Resultado |
+|---|---|---|
+| Envío con texto, HTML y XML adjunto | Mailpit (contenedor local, sin cifrado) | Entregado; cabeceras, cuerpo y adjunto correctos |
+| Entrega de una nota de crédito autorizada | Servidor SMTP real del propietario, puerto 587 con STARTTLS y autenticación (2026-11-15) | Mensaje **aceptado por el servidor** |
+
+«Aceptado por el servidor» no garantiza la llegada a la bandeja de entrada: eso depende de la reputación del remitente (SPF, DKIM, DMARC), ajena al SDK.
+
 ## Producción
 
 No se envía ni se enviará nada a producción desde este proyecto.

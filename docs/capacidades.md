@@ -23,5 +23,5 @@ Leyenda: ✅ implementado y probado · 🚧 parcial · ⏳ pendiente.
 | Nota de crédito v1.0.0 / 1.1.0 | ✅ | Modelo, totales, validación y `DesdeFactura`. Total y parcial **autorizadas** en el ambiente de pruebas (1.1.0). Sin `valorDevolucionIva` (Anexo 20) |
 | Nota de débito, guía de remisión, retención, liquidación de compra | ⏳ | XSD ya incrustados; faltan los modelos |
 | RIDE (representación impresa) | ⏳ | |
-| Envío por correo (`correo`) | 🚧 | Paquete opcional, solo biblioteca estándar. STARTTLS/TLS obligatorios fuera de localhost. Probado contra Mailpit; adjunta el XML autorizado (el RIDE cuando exista) |
+| Envío por correo (`correo`) | 🚧 | Paquete opcional, solo biblioteca estándar. STARTTLS/TLS obligatorios fuera de localhost. Probado contra Mailpit y con un servidor SMTP real (STARTTLS); adjunta el XML autorizado (el RIDE cuando exista) |
 | Devolución de IVA (servicios DIG, sección 13) | ⏳ | |
