@@ -26,6 +26,7 @@ import (
 	"github.com/OsirisRoman/sri-ecuador-go/factura"
 	"github.com/OsirisRoman/sri-ecuador-go/internal/entorno"
 	"github.com/OsirisRoman/sri-ecuador-go/notacredito"
+	"github.com/OsirisRoman/sri-ecuador-go/notadebito"
 	"github.com/OsirisRoman/sri-ecuador-go/xades"
 )
 
@@ -140,6 +141,7 @@ func pagosPendientes(f *factura.Factura) {
 func main() {
 	desde := flag.Int("desde", 0, "primer secuencial a usar (obligatorio)")
 	solo := flag.String("solo", "", "ejecuta solo los escenarios indicados, separados por comas")
+	ndDesde := flag.Int("nd-desde", 0, "secuencial de nota de débito; activa el escenario de nota de débito")
 	ncDesde := flag.Int("nc-desde", 0, "primer secuencial de nota de crédito; activa los escenarios de nota de crédito")
 	dir := flag.String("dir", "evidencia-privada", "directorio de evidencias (excluido de Git)")
 	flag.Parse()
@@ -171,8 +173,8 @@ func main() {
 		if *solo != "" && !strings.Contains(","+*solo+",", ","+e.nombre+",") {
 			continue
 		}
-		if *solo == "" && *ncDesde > 0 {
-			continue // con -nc-desde y sin -solo se ejecutan solo las notas de crédito
+		if *solo == "" && (*ncDesde > 0 || *ndDesde > 0) {
+			continue // con -nc-desde o -nd-desde y sin -solo no se repiten las facturas
 		}
 		decir("\n== %s (secuencial %d, %s)\n   %s", e.nombre, sec, e.algoritmo, e.descripcion)
 		emisor, err := entorno.Emisor(comprobante.CodFactura, sec)
@@ -284,6 +286,68 @@ func main() {
 			os.WriteFile(base+".firmado.xml", prepNC.XMLFirmado, 0o600)
 			decir("   -- nota de crédito v%s, valor %s", valor(n.Version, notacredito.VersionPorDefecto), n.InfoNotaCredito.ValorModificacion)
 			if !enviar(cli, prepNC.XMLFirmado, base, decir) {
+				fallos++
+			}
+		}
+	}
+	if *ndDesde > 0 {
+		decir("\n== nota-debito (factura %d, nota de débito %d)", sec, *ndDesde)
+		emisor, err := entorno.Emisor(comprobante.CodFactura, sec)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		f := &factura.Factura{InfoTributaria: emisor}
+		f.InfoFactura.FechaEmision = comprobante.Hoy()
+		f.InfoFactura.ObligadoContabilidad = entorno.Valor("SRI_EMISOR_OBLIGADO_CONTABILIDAD", "NO")
+		compradorRUC(f)
+		f.Detalles = []factura.Detalle{factura.LineaIVA("A-1", "Servicio a crédito", d("1"), d("100.00"), comprobante.IVA15)}
+		f.InfoFactura.Pagos = []comprobante.Pago{{FormaPago: comprobante.PagoOtrosSistFinanciero}}
+		f.Calcular()
+		f.GenerarClaveAcceso("")
+		cli, err := sri.Nuevo(sri.Config{Ambiente: comprobante.Pruebas, Certificado: cert, RUC: emisor.RUC})
+		if err != nil {
+			panic(err)
+		}
+		if prep, err := cli.Preparar(f); err != nil {
+			decir("   ERROR local en la factura: %v", err)
+			fallos++
+		} else {
+			sec++
+			decir("   -- factura de sustento, importe %s", f.InfoFactura.ImporteTotal)
+			if enviar(cli, prep.XMLFirmado, filepath.Join(ronda, fmt.Sprintf("%d-factura-para-nd", sec-1)), decir) {
+				itND, _ := entorno.Emisor(comprobante.CodNotaDebito, *ndDesde)
+				n := &notadebito.NotaDebito{
+					InfoTributaria: itND,
+					InfoNotaDebito: notadebito.InfoNotaDebito{
+						FechaEmision:                comprobante.Hoy(),
+						DirEstablecimiento:          f.InfoFactura.DirEstablecimiento,
+						ObligadoContabilidad:        f.InfoFactura.ObligadoContabilidad,
+						TipoIdentificacionComprador: f.InfoFactura.TipoIdentificacionComprador,
+						RazonSocialComprador:        f.InfoFactura.RazonSocialComprador,
+						IdentificacionComprador:     f.InfoFactura.IdentificacionComprador,
+						CodDocModificado:            comprobante.CodFactura,
+						NumDocModificado:            f.InfoTributaria.NumeroComprobante(),
+						FechaEmisionDocSustento:     f.InfoFactura.FechaEmision,
+						Impuestos:                   []notadebito.Impuesto{notadebito.ImpuestoIVA(comprobante.IVA15)},
+						Pagos:                       []comprobante.Pago{{FormaPago: comprobante.PagoOtrosSistFinanciero}},
+					},
+					Motivos: []notadebito.Motivo{{Razon: "Interés por mora (prueba)", Valor: d("3.45")}, {Razon: "Gastos de cobranza (prueba)", Valor: d("1.50")}},
+				}
+				n.Calcular()
+				n.GenerarClaveAcceso("")
+				if prepND, err := cli.Preparar(n); err != nil {
+					decir("   ERROR local en la nota de débito: %v", err)
+					fallos++
+				} else {
+					base := filepath.Join(ronda, fmt.Sprintf("nd-%d", *ndDesde))
+					os.WriteFile(base+".firmado.xml", prepND.XMLFirmado, 0o600)
+					decir("   -- nota de débito v%s, valor total %s", notadebito.Version, n.InfoNotaDebito.ValorTotal)
+					if !enviar(cli, prepND.XMLFirmado, base, decir) {
+						fallos++
+					}
+				}
+			} else {
 				fallos++
 			}
 		}

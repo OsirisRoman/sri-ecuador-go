@@ -38,9 +38,10 @@ func (l Lista[T]) MarshalXML(e *xml.Encoder, inicio xml.StartElement) error {
 	return e.EncodeToken(inicio.End())
 }
 
-// UnmarshalXML implementa xml.Unmarshaler.
+// UnmarshalXML implementa xml.Unmarshaler. Si el contenedor aparece más de
+// una vez (el XSD de la nota de débito lo permite para <pagos>), los ítems
+// se acumulan.
 func (l *Lista[T]) UnmarshalXML(d *xml.Decoder, inicio xml.StartElement) error {
-	*l = nil
 	for {
 		tok, err := d.Token()
 		if err != nil {

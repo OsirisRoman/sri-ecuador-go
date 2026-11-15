@@ -46,7 +46,8 @@ import (
 )
 
 // Comprobante es lo que el Cliente necesita de un documento para emitirlo.
-// *factura.Factura y *notacredito.NotaCredito lo implementan.
+// Lo implementan *factura.Factura, *notacredito.NotaCredito y
+// *notadebito.NotaDebito.
 type Comprobante interface {
 	// XML serializa el comprobante sin firma.
 	XML() ([]byte, error)

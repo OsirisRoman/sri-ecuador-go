@@ -70,6 +70,16 @@ Para cada caso se emitió primero una factura de sustento (v1.1.0, comprador con
 
 Se usó el XSD `NotaCredito_V1.1.0.xsd` (sin `valorDevolucionIva`). No se probó la versión 1.0.0 de la nota de crédito ni el campo de devolución de IVA.
 
+### Ronda 4 — 2026-11-15: nota de débito
+
+Factura de sustento autorizada (v1.1.0, USD 115,00) y, sobre ella, una nota de débito v1.0.0 con dos motivos (intereses y gastos de cobranza), IVA 15 % y una forma de pago.
+
+| Escenario | Versión | Recepción | Autorización |
+|---|---|---|---|
+| Nota de débito con dos motivos e IVA 15 % | 1.0.0 | `RECIBIDA` | **`AUTORIZADO`** |
+
+No se probó `valorDevolucionIva` (requiere el servicio DIG, Anexo 20).
+
 Qué **no** demuestran estas rondas:
 
 - Un solo certificado (Banco Central del Ecuador) y un solo emisor (persona natural). Certificados de otras entidades (Security Data, ANF, Uanataca…) pueden tener emisores con atributos distintos en `X509IssuerName`.

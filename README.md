@@ -2,7 +2,7 @@
 
 SDK de código abierto, nativo en Go, para la **facturación electrónica del SRI de Ecuador** (esquema offline): modelos tipados, validación XSD real, firma XAdES-BES y clientes SOAP de recepción y autorización.
 
-> **Estado: en desarrollo activo (pre-1.0).** El flujo completo de **factura** y **nota de crédito** funciona: el ambiente de certificación del SRI ha **autorizado** comprobantes generados y firmados con este SDK. Faltan los demás comprobantes y más casos reales; consulte [docs/pruebas-sri.md](docs/pruebas-sri.md) para saber qué está comprobado y qué no. La API puede cambiar.
+> **Estado: en desarrollo activo (pre-1.0).** El flujo completo de **factura**, **nota de crédito** y **nota de débito** funciona: el ambiente de certificación del SRI ha **autorizado** comprobantes generados y firmados con este SDK. Faltan los demás comprobantes y más casos reales; consulte [docs/pruebas-sri.md](docs/pruebas-sri.md) para saber qué está comprobado y qué no. La API puede cambiar.
 
 - Go puro, **sin cgo**, sin Java, sin Node.js, sin base de datos.
 - Tres dependencias de ejecución (XSD, PKCS#12 y `x/crypto`).
@@ -72,6 +72,7 @@ Un ejemplo ejecutable completo está en [`example_test.go`](example_test.go).
 | `sri` (raíz) | Flujo completo: `Preparar`, `Emitir`, `Reanudar`, `Autorizar` |
 | `factura` | Modelo tipado de la factura (v1.0.0, 1.1.0, 2.0.0, 2.1.0), totales y validación |
 | `notacredito` | Nota de crédito (v1.0.0, 1.1.0); `DesdeFactura` revierte una factura |
+| `notadebito` | Nota de débito (v1.0.0) |
 | `comprobante` | Tipos, catálogos y cálculo de impuestos comunes |
 | `clave` | Clave de acceso: generar, analizar, validar |
 | `decimal` | Decimales exactos para importes |
