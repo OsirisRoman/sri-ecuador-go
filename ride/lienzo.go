@@ -11,9 +11,9 @@ const (
 	margen    = 28.0
 	anchoUtil = pdf.Ancho - 2*margen
 	pie       = pdf.Alto - margen
-	relleno   = 4.0 // espacio interior de cajas y celdas
+	relleno   = 6.0 // espacio interior de cajas y celdas
 	grosor    = 0.5
-	separa    = 8.0 // separación vertical entre bloques
+	separa    = 14.0 // separación vertical entre bloques
 )
 
 // par es un dato rotulado: «Identificación: 1790011674001».
@@ -48,7 +48,13 @@ func (l *lienzo) asegurar(alto float64) {
 	}
 }
 
-func interlinea(tam float64) float64 { return tam * 1.3 }
+// Tamaños de letra, en puntos.
+const (
+	tamTexto = 9.5 // datos de las cajas
+	tamTabla = 8.5 // celdas y cabeceras de tabla
+)
+
+func interlinea(tam float64) float64 { return tam * 1.45 }
 
 // parrafo escribe texto ajustado al ancho, con la primera línea base en
 // y+tam, y devuelve el alto ocupado. Si dibujar es false solo mide.
@@ -108,14 +114,14 @@ func (l *lienzo) filasPares(dibujar bool, x, y, ancho float64, filas [][]par, ta
 		for i, p := range fila {
 			h = max(h, l.parRotulado(dibujar, x+float64(i)*w, y, w-relleno, p, tam))
 		}
-		y += h + 2
+		y += h + 3
 	}
 	return y - y0
 }
 
 // caja dibuja un recuadro a todo el ancho con filas de pares.
 func (l *lienzo) caja(filas [][]par) {
-	const tam = 8
+	const tam = tamTexto
 	h := l.filasPares(false, 0, 0, anchoUtil-2*relleno, filas, tam) + 2*relleno
 	l.asegurar(h)
 	l.d.Rect(margen, l.y, anchoUtil, h, grosor)
@@ -126,7 +132,8 @@ func (l *lienzo) caja(filas [][]par) {
 // tabla dibuja una tabla a partir de x con el ancho dado. Repite la
 // cabecera al saltar de página.
 func (l *lienzo) tabla(x, ancho float64, cols []columna, filas [][]string) {
-	const tam, tamCab = 7, 7
+	const tam, tamCab = tamTabla, tamTabla - 0.5
+	const relleno = 4.0 // las celdas llevan menos margen que las cajas
 	total := 0.0
 	for _, c := range cols {
 		total += c.ancho
@@ -142,7 +149,7 @@ func (l *lienzo) tabla(x, ancho float64, cols []columna, filas [][]string) {
 				h = max(h, l.parrafo(false, 0, 0, w[i]-2*relleno, celdas[i], f, t, izquierda))
 			}
 		}
-		return h + 2*relleno - 2
+		return h + 2*relleno + 1
 	}
 	titulos := make([]string, len(cols))
 	for i, c := range cols {
@@ -154,7 +161,7 @@ func (l *lienzo) tabla(x, ancho float64, cols []columna, filas [][]string) {
 		cx := x
 		for i := range cols {
 			l.d.Rect(cx, l.y, w[i], hCab, grosor)
-			l.parrafo(true, cx+relleno, l.y+relleno-1, w[i]-2*relleno, titulos[i], pdf.Negrita, tamCab, centro)
+			l.parrafo(true, cx+relleno, l.y+relleno, w[i]-2*relleno, titulos[i], pdf.Negrita, tamCab, centro)
 			cx += w[i]
 		}
 		l.y += hCab
@@ -176,7 +183,7 @@ func (l *lienzo) tabla(x, ancho float64, cols []columna, filas [][]string) {
 		for i, c := range cols {
 			l.d.Rect(cx, l.y, w[i], h, grosor)
 			if i < len(fila) {
-				l.parrafo(true, cx+relleno, l.y+relleno-1, w[i]-2*relleno, fila[i], pdf.Normal, tam, c.alinea)
+				l.parrafo(true, cx+relleno, l.y+relleno, w[i]-2*relleno, fila[i], pdf.Normal, tam, c.alinea)
 			}
 			cx += w[i]
 		}

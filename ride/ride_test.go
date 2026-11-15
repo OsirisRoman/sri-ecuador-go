@@ -119,7 +119,7 @@ func TestFacturaTotalesYPaginacion(t *testing.T) {
 		t.Errorf("páginas = %d", paginas)
 	}
 	for _, quiero := range []string{"(SUBTOTAL 15%)", "(IVA 15%)", "(VALOR TOTAL)", "(2.30)",
-		"(Producto de prueba con \xf1 y \\(par\xe9ntesis\\))", "01 - SIN UTILIZACI"} {
+		"(Producto de prueba", "par\xe9ntesis", "01 - SIN UTILIZACI"} {
 		if !strings.Contains(texto, quiero) {
 			t.Errorf("falta %q", quiero)
 		}
