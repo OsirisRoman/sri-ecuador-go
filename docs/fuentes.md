@@ -8,6 +8,8 @@
 | Esquemas XSD y XML de ejemplo, SRI (<https://www.sri.gob.ec/facturacion-electronica>) | descargados el 2026-11-14 | Incrustados sin modificar en `esquema/xsd/`; SHA-256 en `esquema/xsd/PROCEDENCIA.md` |
 | WSDL de los servicios (`celcer.sri.gob.ec`) | consultados el 2026-11-14 | Forma de los mensajes SOAP de `ws` |
 | ETSI TS 101 903 v1.3.2 (XAdES), W3C XMLDSig, W3C Canonical XML 1.0, RFC 2253 | — | `xades`, `internal/xmldom` |
+| ISO/IEC 15417 (Code 128), referencia PDF 1.4 | — | Código de barras y generador de PDF del RIDE (`internal/pdf`) |
+| Archivos AFM de las 14 fuentes base de PDF, Adobe | — | Anchos de los glifos de Helvetica y Helvetica-Bold (`internal/pdf/metricas.go`); libre distribución conservando el aviso de copyright (ver `NOTICE`) |
 
 ## Implementaciones estudiadas (ayudan a descubrir cómo cumplir)
 

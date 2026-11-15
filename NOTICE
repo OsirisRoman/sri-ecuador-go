@@ -16,6 +16,14 @@ Este producto incluye material de terceros:
    Distribuido bajo la W3C Software License:
    http://www.w3.org/Consortium/Legal/copyright-software-19980720
 
+3. Métricas de las fuentes Helvetica y Helvetica-Bold (internal/pdf/metricas.go),
+   tomadas de los archivos AFM de las 14 fuentes base de PDF.
+   Copyright (c) 1985, 1987, 1989, 1990, 1997 Adobe Systems Incorporated.
+   All Rights Reserved. Adobe permite usar, copiar y distribuir estos
+   archivos con cualquier fin y sin cargo, con o sin modificación, siempre
+   que se conserven los avisos de copyright. Solo se incluyen los anchos de
+   los glifos; no se incluye ni se incrusta ninguna fuente.
+
 Dependencias de ejecución (no incluidas en este repositorio):
 
 - github.com/cB-Sigma/xsd — Apache License 2.0

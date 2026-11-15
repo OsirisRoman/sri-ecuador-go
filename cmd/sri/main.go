@@ -27,7 +27,7 @@ import (
 	"github.com/OsirisRoman/sri-ecuador-go/esquema"
 	"github.com/OsirisRoman/sri-ecuador-go/factura"
 	"github.com/OsirisRoman/sri-ecuador-go/internal/entorno"
-	"github.com/OsirisRoman/sri-ecuador-go/notacredito"
+	"github.com/OsirisRoman/sri-ecuador-go/ride"
 	"github.com/OsirisRoman/sri-ecuador-go/xades"
 )
 
@@ -45,8 +45,11 @@ const uso = `Uso: sri <orden> [opciones]
   autorizacion <clave>     Consulta la autorización de una clave de acceso
   estado <clave>           Consulta de validez (AUTORIZADO, ANULADO, …)
 
+Representación impresa:
+  ride <comprobante.xml>   Genera el RIDE en PDF (-salida, -logo); use el .autorizado.xml
+
 Correo (opcional; variables SMTP_*):
-  correo <autorizado.xml>  Compone el correo de entrega de un comprobante autorizado;
+  correo <autorizado.xml>  Compone el correo de entrega (XML y RIDE) de un comprobante autorizado;
                            con -enviar lo envía a -para (por defecto SMTP_TEST_TO)
 
 Configuración (variables de entorno o archivo .env; ver .env.example):
@@ -77,6 +80,8 @@ func main() {
 		err = cmdAutorizacion(args)
 	case "estado":
 		err = cmdEstado(args)
+	case "ride":
+		err = cmdRide(os.Args[2:])
 	case "correo":
 		err = cmdCorreo(args)
 	case "-h", "--help", "ayuda":
@@ -370,11 +375,42 @@ func cmdEstado(args []string) error {
 
 // cmdCorreo compone, y con -enviar envía, el correo de entrega de un
 // comprobante autorizado.
+func cmdRide(args []string) error {
+	fs := flag.NewFlagSet("ride", flag.ExitOnError)
+	salida := fs.String("salida", "", "archivo PDF de salida (por defecto, el de entrada con extensión .pdf)")
+	rutaLogo := fs.String("logo", os.Getenv("SRI_EMISOR_LOGO"), "logotipo PNG o JPEG (por defecto SRI_EMISOR_LOGO)")
+	fs.Parse(args)
+	doc, ruta, err := leerArg(fs.Args())
+	if err != nil {
+		return err
+	}
+	var logo []byte
+	if *rutaLogo != "" {
+		if logo, err = os.ReadFile(*rutaLogo); err != nil {
+			return err
+		}
+	}
+	pdf, err := ride.Generar(doc, &ride.Opciones{Logo: logo})
+	if err != nil {
+		return err
+	}
+	if *salida == "" {
+		*salida = strings.TrimSuffix(ruta, ".xml") + ".pdf"
+	}
+	if err := os.WriteFile(*salida, pdf, 0o600); err != nil {
+		return err
+	}
+	fmt.Printf("RIDE guardado en %s (%d bytes)\n", *salida, len(pdf))
+	return nil
+}
+
 func cmdCorreo(args []string) error {
 	fs := flag.NewFlagSet("correo", flag.ExitOnError)
 	para := fs.String("para", os.Getenv("SMTP_TEST_TO"), "destinatario (por defecto SMTP_TEST_TO)")
 	enviar := fs.Bool("enviar", false, "envía el correo por el servidor SMTP configurado (sin esta opción solo se compone)")
 	salida := fs.String("salida", "", "guarda el mensaje compuesto (.eml) en este archivo")
+	sinRide := fs.Bool("sin-ride", false, "no adjunta el RIDE en PDF")
+	rutaLogo := fs.String("logo", os.Getenv("SRI_EMISOR_LOGO"), "logotipo PNG o JPEG para el RIDE (por defecto SRI_EMISOR_LOGO)")
 	fs.Parse(args)
 	doc, _, err := leerArg(fs.Args())
 	if err != nil {
@@ -387,28 +423,21 @@ func cmdCorreo(args []string) error {
 	if err := xml.Unmarshal(doc, &aut); err != nil || aut.Estado != "AUTORIZADO" || aut.Comprobante == "" {
 		return errors.New("el archivo no es un comprobante AUTORIZADO (use el .autorizado.xml)")
 	}
-	datos := correo.Comprobante{XML: doc}
-	tipo, _, err := esquema.Identificar([]byte(aut.Comprobante))
+	res, err := ride.Resumir(doc)
 	if err != nil {
 		return err
 	}
-	switch tipo {
-	case esquema.Factura:
-		f, err := factura.Parse([]byte(aut.Comprobante))
-		if err != nil {
+	datos := correo.Comprobante{Tipo: res.Tipo, Numero: res.Numero, ClaveAcceso: res.ClaveAcceso, Emisor: res.Emisor, Receptor: res.Receptor, XML: doc}
+	if !*sinRide {
+		var logo []byte
+		if *rutaLogo != "" {
+			if logo, err = os.ReadFile(*rutaLogo); err != nil {
+				return err
+			}
+		}
+		if datos.RIDE, err = ride.Generar(doc, &ride.Opciones{Logo: logo}); err != nil {
 			return err
 		}
-		datos.Tipo, datos.Numero, datos.ClaveAcceso = "Factura", f.InfoTributaria.NumeroComprobante(), f.InfoTributaria.ClaveAcceso
-		datos.Emisor, datos.Receptor = f.InfoTributaria.RazonSocial, f.InfoFactura.RazonSocialComprador
-	case esquema.NotaCredito:
-		n, err := notacredito.Parse([]byte(aut.Comprobante))
-		if err != nil {
-			return err
-		}
-		datos.Tipo, datos.Numero, datos.ClaveAcceso = "Nota de crédito", n.InfoTributaria.NumeroComprobante(), n.InfoTributaria.ClaveAcceso
-		datos.Emisor, datos.Receptor = n.InfoTributaria.RazonSocial, n.InfoNotaCredito.RazonSocialComprador
-	default:
-		return fmt.Errorf("tipo de comprobante %q aún no admitido para correo", tipo)
 	}
 	puerto, _ := strconv.Atoi(entorno.Valor("SMTP_PORT", "587"))
 	cli, err := correo.Nuevo(correo.Config{
