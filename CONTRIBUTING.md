@@ -36,7 +36,12 @@ go test -race ./...
 CGO_ENABLED=0 go build ./...
 ```
 
-La integración continua ejecuta lo mismo con dos versiones de Go.
+La integración continua ejecuta lo mismo con dos versiones de Go y, además:
+
+- **Seguridad:** `go mod verify` y `govulncheck` (también cada semana, aunque no haya cambios).
+- **Interoperabilidad:** la firma contra `xmlsec1` y la canonicalización y el XSD contra `xmllint` (libxml2), con `SRI_INTEROP=1 go test ./internal/interop`, más un fuzzing breve del analizador XML. En local, esas pruebas se omiten si no tiene las herramientas (`apt-get install xmlsec1 libxml2-utils`).
+
+Las acciones del CI se fijan por SHA, con la versión en un comentario. Para actualizar una, tome el SHA de la etiqueta nueva (`gh api repos/actions/checkout/commits/vX.Y.Z --jq .sha`) y cambie SHA y comentario a la vez.
 
 ### Probar contra el SRI (opcional)
 
