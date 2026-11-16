@@ -95,7 +95,7 @@ Antes de enviar, `Preparar` puede devolver `*sri.ErrorValidacion`: el comprobant
 ## 6. Reglas que no se deben romper
 
 1. **Nunca use `float64` para importes.** Use `decimal.Decimal` (`decimal.MustParse("12.50")`). El SRI rechaza diferencias de un centavo (error 52).
-2. **Llame a `Calcular()` después del último cambio** y antes de `GenerarClaveAcceso`. Si cambia una línea, vuelva a calcular.
+2. **Llame a `Calcular()` después del último cambio** y antes de `GenerarClaveAcceso`. Si cambia una línea, vuelva a calcular: `Calcular` deja el comprobante como si se hubiera construido desde cero con los datos nuevos (IVA, ICE deducido, totales y pago único). Lo que usted indicó expresamente (la base o el valor de un ICE específico, un IRBPNR por unidad, un pago que no es el importe total) se respeta: actualícelo usted si depende de lo que cambió, o póngalo a cero para que `Calcular` lo deduzca.
 3. **Una clave de acceso por comprobante, generada una vez y guardada.** Un reintento por fallo de red reutiliza la misma clave y el mismo XML firmado. El SDK reconoce las respuestas «clave ya registrada» (43) y «en procesamiento» (70), continúa con la consulta y comprueba que el comprobante autorizado sea el que envió.
 4. **Guarde el XML firmado antes de enviarlo** y el XML autorizado después. Sin el firmado no puede reanudar con seguridad.
 5. **El secuencial es suyo.** Resérvelo de forma atómica (transacción o secuencia de base de datos). Un comprobante `DEVUELTO` o `NO AUTORIZADO` se corrige y se reenvía con su misma clave y su mismo secuencial (ficha 5.10); uno `AUTORIZADO` no se vuelve a emitir.
@@ -125,7 +125,7 @@ El RIDE puede regenerarse en cualquier momento a partir del XML autorizado; no e
 
 **Factura.** `factura.LineaIVA(codigo, descripcion, cantidad, precio, comprobante.IVA15)` crea una línea con un impuesto IVA; para ICE o varios impuestos, llene `Detalle.Impuestos`. A consumidor final (`comprobante.IDConsumidorFinal`, identificación `9999999999999`) el límite es USD 50. La versión por defecto es la 1.1.0 (hasta 6 decimales en cantidad y precio). Exportación: `InfoFactura.ComercioExterior = factura.ComercioExteriorExportador` y los campos de incoterm; los países usan los códigos de `comprobante.Paises` (Tabla 25 del SRI, **no** ISO 3166). Reembolso: llene `Factura.Reembolsos` y `Calcular` completa los totales.
 
-**Nota de crédito.** `notacredito.DesdeFactura(f, motivo)` crea la nota que revierte por completo una factura; para una devolución parcial, recorte `Detalles`, ajuste cantidades y vuelva a `Calcular()`. Necesita su propio secuencial y clave.
+**Nota de crédito.** `notacredito.DesdeFactura(f, motivo)` crea la nota que revierte por completo una factura; para una devolución parcial, recorte `Detalles`, ajuste cantidades y vuelva a `Calcular()`, que recalcula el IVA y el ICE deducido de cada línea (un ICE específico copiado de la factura debe ajustarlo usted). Necesita su propio secuencial y clave.
 
 **Nota de débito.** Lista de `Motivos` con su valor y los impuestos sobre el total (`notadebito.ImpuestoIVA(comprobante.IVA15)`).
 

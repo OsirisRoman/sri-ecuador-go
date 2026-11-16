@@ -132,17 +132,18 @@ func (l *LiquidacionCompra) impuestosPorLinea() [][]comprobante.Impuesto {
 // Calcular completa los importes derivados de los detalles (total de cada
 // línea, impuestos, totalSinImpuestos, totalDescuento, totalConImpuestos e
 // importeTotal), los totales de reembolso si hay reembolsos y el total del
-// pago cuando hay uno solo sin importe. Sigue los mismos criterios que
-// factura.Factura.Calcular.
+// pago cuando hay uno solo. Sigue los mismos criterios que
+// factura.Factura.Calcular, también al recalcular.
 func (l *LiquidacionCompra) Calcular() {
 	totalSin, totalDesc := decimal.Cero, decimal.Cero
 	for i := range l.Detalles {
 		d := &l.Detalles[i]
 		d.Descuento = d.Descuento.Redondear(2)
+		anterior := d.PrecioTotalSinImpuesto
 		d.PrecioTotalSinImpuesto = comprobante.TotalLinea(d.Cantidad, d.PrecioUnitario, d.Descuento)
 		totalSin = totalSin.Sumar(d.PrecioTotalSinImpuesto)
 		totalDesc = totalDesc.Sumar(d.Descuento)
-		comprobante.CalcularImpuestos(d.PrecioTotalSinImpuesto, d.Impuestos)
+		comprobante.RecalcularImpuestos(anterior, d.PrecioTotalSinImpuesto, d.Impuestos)
 	}
 	info := &l.InfoLiquidacionCompra
 	info.TotalSinImpuestos = totalSin.Redondear(2)
@@ -167,6 +168,7 @@ func (l *LiquidacionCompra) Calcular() {
 		info.TotalConImpuestos = append(info.TotalConImpuestos, t)
 		total = total.Sumar(t.Valor)
 	}
+	importeAnterior := info.ImporteTotal
 	info.ImporteTotal = total.Redondear(2)
 
 	if len(l.Reembolsos) > 0 {
@@ -175,9 +177,7 @@ func (l *LiquidacionCompra) Calcular() {
 		info.CodDocReembolso = CodDocReembolso
 		info.TotalBaseImponibleReembolso, info.TotalImpuestoReembolso, info.TotalComprobantesReembolso = &base, &imp, &suma
 	}
-	if len(info.Pagos) == 1 && info.Pagos[0].Total.EsCero() {
-		info.Pagos[0].Total = info.ImporteTotal
-	}
+	comprobante.AsignarPagoUnico(info.Pagos, importeAnterior, info.ImporteTotal)
 	if info.Moneda == "" {
 		info.Moneda = comprobante.MonedaDolar
 	}
@@ -241,6 +241,14 @@ func (l *LiquidacionCompra) ValidarCon(op OpcionesValidacion) comprobante.Hallaz
 	}
 	sumaLineas, sumaDesc := factura.ValidarDetalles(v, l.Detalles, decimales)
 	factura.VigenciaDetalles(v, l.Detalles, info.FechaEmision)
+	for i, d := range l.Detalles {
+		for j, imp := range d.Impuestos {
+			// El XSD de la liquidación de compra solo admite el código 2.
+			if imp.Codigo == comprobante.ImpuestoICE || imp.Codigo == comprobante.ImpuestoIRBPNR {
+				v.Errorf(fmt.Sprintf("detalles[%d].impuestos[%d].codigo", i, j), "liquidacion.impuesto", "la liquidación de compra solo admite IVA (código 2); el esquema no acepta el impuesto %s", imp.Codigo)
+			}
+		}
+	}
 	v.Numero(p+"totalSinImpuestos", info.TotalSinImpuestos, 14, 2)
 	v.Numero(p+"totalDescuento", info.TotalDescuento, 14, 2)
 	v.Numero(p+"importeTotal", info.ImporteTotal, 14, 2)

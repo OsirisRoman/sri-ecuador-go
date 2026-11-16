@@ -31,21 +31,29 @@ func totalLinea(d Detalle) decimal.Decimal {
 //   - infoFactura: totalSinImpuestos, totalDescuento, totalConImpuestos e
 //     importeTotal (incluye propina, rubros de exportación y de terceros).
 //   - Reembolsos: si los hay, codDocReembolso (41) y sus tres totales.
-//   - Pagos: si hay un único pago sin total, se le asigna el importe total.
+//   - Pagos: un único pago sigue al importe total (ver
+//     comprobante.AsignarPagoUnico).
 //
 // Todos los importes monetarios se redondean a 2 decimales, mitad hacia
-// arriba. Calcular es idempotente y no modifica los datos de entrada
-// (cantidades, precios, descuentos, códigos).
+// arriba. Calcular no modifica los datos de entrada (cantidades, precios,
+// descuentos, códigos) y puede llamarse de nuevo después de cambiarlos:
+// deja el comprobante como si se hubiera construido desde cero con los
+// datos nuevos, y sin cambios no altera nada. Lo que dedujo (IVA, totales,
+// ICE e IRBPNR sin importes indicados, pago único) se vuelve a deducir; la
+// base o el valor de un ICE o IRBPNR que indicó la aplicación se respetan,
+// y debe actualizarlos ella si dependen de lo que cambió (ver
+// comprobante.RecalcularImpuestos).
 func (f *Factura) Calcular() {
 	totalSin, totalDesc := decimal.Cero, decimal.Cero
 	for i := range f.Detalles {
 		d := &f.Detalles[i]
 		d.Descuento = d.Descuento.Redondear(2)
+		anterior := d.PrecioTotalSinImpuesto
 		d.PrecioTotalSinImpuesto = totalLinea(*d)
 		totalSin = totalSin.Sumar(d.PrecioTotalSinImpuesto)
 		totalDesc = totalDesc.Sumar(d.Descuento)
 
-		comprobante.CalcularImpuestos(d.PrecioTotalSinImpuesto, d.Impuestos)
+		comprobante.RecalcularImpuestos(anterior, d.PrecioTotalSinImpuesto, d.Impuestos)
 	}
 
 	info := &f.InfoFactura
@@ -79,6 +87,7 @@ func (f *Factura) Calcular() {
 	}
 
 	info.Propina = info.Propina.Redondear(2)
+	importeAnterior := info.ImporteTotal
 	info.ImporteTotal = f.importeEsperado(impuestos)
 	if len(f.Reembolsos) > 0 {
 		base, imp := TotalesReembolso(f.Reembolsos)
@@ -86,9 +95,7 @@ func (f *Factura) Calcular() {
 		info.CodDocReembolso = CodDocReembolso
 		info.TotalBaseImponibleReembolso, info.TotalImpuestoReembolso, info.TotalComprobantesReembolso = &base, &imp, &suma
 	}
-	if len(info.Pagos) == 1 && info.Pagos[0].Total.EsCero() {
-		info.Pagos[0].Total = info.ImporteTotal
-	}
+	comprobante.AsignarPagoUnico(info.Pagos, importeAnterior, info.ImporteTotal)
 	if info.Moneda == "" {
 		info.Moneda = comprobante.MonedaDolar
 	}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
+	"github.com/OsirisRoman/sri-ecuador-go/internal/derivado"
 	"github.com/OsirisRoman/sri-ecuador-go/internal/xmldom"
 )
 
@@ -169,12 +170,21 @@ func (i InfoTributaria) NumeroComprobante() string {
 }
 
 // Impuesto es un <impuesto> de un detalle.
+//
+// Para el IVA basta el código de porcentaje: Calcular deduce siempre la
+// tarifa, la base y el valor. Para ICE e IRBPNR, Calcular deduce la base y
+// el valor que la aplicación deje en cero y respeta los que indique; ver
+// RecalcularImpuestos.
 type Impuesto struct {
 	Codigo           string          `xml:"codigo"`
 	CodigoPorcentaje string          `xml:"codigoPorcentaje"`
 	Tarifa           decimal.Decimal `xml:"tarifa"`
 	BaseImponible    decimal.Decimal `xml:"baseImponible"`
 	Valor            decimal.Decimal `xml:"valor"`
+
+	// derivado recuerda qué base y qué valor dedujo Calcular, para volver a
+	// deducirlos al recalcular. No se serializa.
+	derivado derivado.Marca
 }
 
 // TotalImpuesto es un <totalImpuesto> de <totalConImpuestos>.
