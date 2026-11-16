@@ -14,6 +14,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -787,7 +788,8 @@ func enviar(cli *sri.Cliente, doc []byte, base string, decir func(string, ...any
 				decir("     %s %s", m.Tipo, sanear(m.String()))
 			}
 		}
-		decir("   resultado: %s", res.Estado)
+		decir("   resultado: %s (verificado=%t, discrepancia=%t, indeterminado=%t)", res.Estado, res.Verificado,
+			errors.Is(err, sri.ErrDiscrepancia), errors.Is(err, sri.ErrEstadoIndeterminado))
 		if res.Autorizacion != nil {
 			decir("   estado SRI: %q", res.Autorizacion.Estado)
 			for _, m := range res.Autorizacion.Mensajes {
