@@ -43,8 +43,11 @@ func herramienta(t *testing.T, nombre string) string {
 	return ruta
 }
 
-// verificarXmlsec devuelve nil si xmlsec1 da la firma por válida.
-func verificarXmlsec(t *testing.T, xmlsec, certPEM string, doc []byte) error {
+// verificarXmlsec devuelve nil si xmlsec1 da la firma por válida. caPEM es
+// la autoridad de confianza: xmlsec1 1.3 toma la clave del certificado de
+// KeyInfo y exige validar su cadena (sin búsqueda laxa de claves), y 1.2
+// también la acepta así.
+func verificarXmlsec(t *testing.T, xmlsec, caPEM string, doc []byte) error {
 	t.Helper()
 	f := filepath.Join(t.TempDir(), "doc.xml")
 	if err := os.WriteFile(f, doc, 0o600); err != nil {
@@ -54,7 +57,7 @@ func verificarXmlsec(t *testing.T, xmlsec, certPEM string, doc []byte) error {
 		"--id-attr:id", "factura",
 		"--id-attr:Id", "http://uri.etsi.org/01903/v1.3.2#:SignedProperties",
 		"--id-attr:Id", "http://www.w3.org/2000/09/xmldsig#:KeyInfo",
-		"--pubkey-cert-pem", certPEM, f).CombinedOutput()
+		"--trusted-pem", caPEM, f).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%v: %s", err, lastLine(salida))
 	}
@@ -63,7 +66,7 @@ func verificarXmlsec(t *testing.T, xmlsec, certPEM string, doc []byte) error {
 
 func lastLine(b []byte) string {
 	ls := strings.Split(strings.TrimSpace(string(b)), "\n")
-	return ls[len(ls)-1]
+	return strings.Join(ls, " | ")
 }
 
 // La firma del SDK la valida xmlsec1, con ambos algoritmos y con textos que
@@ -74,8 +77,8 @@ func TestFirmaConXmlsec1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	certPEM := filepath.Join(t.TempDir(), "cert.pem")
-	os.WriteFile(certPEM, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: m.Certificado.X509.Raw}), 0o600)
+	certPEM := filepath.Join(t.TempDir(), "ca.pem")
+	os.WriteFile(certPEM, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: m.CA.Raw}), 0o600)
 
 	f := ejemplo.Factura(comprobante.NuevaFecha(2026, 11, 14), "000000001")
 	f.InfoTributaria.RazonSocial = `EMISOR & HIJOS <S.A.> "Ñandú" 'áéí' €`
@@ -113,8 +116,8 @@ func TestNormalizacionDeAtributosConXmlsec1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	certPEM := filepath.Join(t.TempDir(), "cert.pem")
-	os.WriteFile(certPEM, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: m.Certificado.X509.Raw}), 0o600)
+	certPEM := filepath.Join(t.TempDir(), "ca.pem")
+	os.WriteFile(certPEM, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: m.CA.Raw}), 0o600)
 	firmado, err := xades.Firmar([]byte(`<factura id="comprobante" version="1.1.0"><a b="x&#xA;y"/></factura>`), m.Certificado, &xades.Opciones{Momento: time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)})
 	if err != nil {
 		t.Fatal(err)
