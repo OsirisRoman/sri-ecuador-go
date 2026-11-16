@@ -152,7 +152,7 @@ func idAleatorio() (string, error) {
 // El elemento raíz debe ser el comprobante; si no tiene el atributo
 // id="comprobante" se le añade, porque el XSD del SRI lo fija a ese valor.
 func Firmar(xmlDoc []byte, cert *certificado.Certificado, op *Opciones) ([]byte, error) {
-	if cert == nil || cert.X509 == nil || cert.Firmante() == nil {
+	if cert.Utilizable() != nil {
 		return nil, ErrCertificado
 	}
 	var o Opciones

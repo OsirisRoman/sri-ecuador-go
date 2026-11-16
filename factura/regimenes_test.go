@@ -85,13 +85,13 @@ func TestExportacion(t *testing.T) {
 func reembolso() factura.ReembolsoDetalle {
 	return factura.ReembolsoDetalle{
 		TipoIdentificacionProveedorReembolso: comprobante.IDRuc,
-		IdentificacionProveedorReembolso:     "1790011674001",
+		IdentificacionProveedorReembolso:     "1790000001001",
 		CodPaisPagoProveedorReembolso:        "593",
 		TipoProveedorReembolso:               "02",
 		CodDocReembolso:                      "01",
 		EstabDocReembolso:                    "001", PtoEmiDocReembolso: "002", SecuencialDocReembolso: "000000123",
 		FechaEmisionDocReembolso:   comprobante.NuevaFecha(2026, 11, 10),
-		NumeroAutorizacionDocReemb: "1011202601179001167400110010020000001231234567818",
+		NumeroAutorizacionDocReemb: "1011202601179000000100110010020000001231234567816",
 		DetalleImpuestos: []factura.ImpuestoReembolso{{
 			Codigo: comprobante.ImpuestoIVA, CodigoPorcentaje: comprobante.IVA15, Tarifa: d("15"),
 			BaseImponibleReembolso: d("50.00"), ImpuestoReembolso: d("7.50"),

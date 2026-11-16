@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
+	"github.com/OsirisRoman/sri-ecuador-go/internal/xmldom"
 )
 
 // Ambiente es el tipo de ambiente (ficha técnica, Tabla 4).
@@ -301,4 +302,16 @@ func Serializar(v any) ([]byte, error) {
 		return nil, fmt.Errorf("comprobante: no se pudo serializar: %w", err)
 	}
 	return append([]byte(xml.Header), cuerpo...), nil
+}
+
+// Deserializar lee un comprobante desde XML en v. Antes de decodificarlo
+// comprueba el documento con el mismo analizador que la firma: rechaza
+// DOCTYPE, atributos repetidos, documentos demasiado grandes o profundos y
+// cualquier XML mal formado que encoding/xml aceptaría, para que lo que se
+// lee sea exactamente lo que verifica xades.Verificar.
+func Deserializar(doc []byte, v any) error {
+	if _, err := xmldom.Analizar(doc); err != nil {
+		return err
+	}
+	return xml.Unmarshal(doc, v)
 }

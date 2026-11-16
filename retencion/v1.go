@@ -75,7 +75,7 @@ func (c *ComprobanteV1) XML() ([]byte, error) {
 // ParseV1 lee un comprobante de retención versión 1.0.0 desde su XML.
 func ParseV1(doc []byte) (*ComprobanteV1, error) {
 	var c ComprobanteV1
-	if err := xml.Unmarshal(doc, &c); err != nil {
+	if err := comprobante.Deserializar(doc, &c); err != nil {
 		return nil, fmt.Errorf("retencion: XML ilegible: %w", err)
 	}
 	return &c, nil

@@ -272,7 +272,8 @@ type Config struct {
 	// para apuntarlo a sritest o configurar su transporte. Por defecto,
 	// ws.Nuevo(Ambiente).
 	Servicios *ws.Cliente
-	// Espera de autorización; el valor cero usa EsperaPorDefecto.
+	// Espera de autorización; el valor cero usa EsperaPorDefecto. Si se
+	// piden varias consultas sin Intervalo, se usa el de EsperaPorDefecto.
 	Espera Espera
 	// OmitirXSD desactiva la validación de esquema previa a la firma. No
 	// se recomienda: el SRI devolvería el comprobante con el error 35.
@@ -292,6 +293,9 @@ func Nuevo(cfg Config) (*Cliente, error) {
 	if cfg.Ambiente != comprobante.Pruebas && cfg.Ambiente != comprobante.Produccion {
 		return nil, fmt.Errorf("sri: Config.Ambiente debe ser comprobante.Pruebas o comprobante.Produccion")
 	}
+	if cfg.Certificado != nil && cfg.Certificado.Utilizable() != nil {
+		return nil, fmt.Errorf("sri: Config.Certificado: %w", cfg.Certificado.Utilizable())
+	}
 	if cfg.RUC != "" {
 		if err := comprobante.ValidarRUC(cfg.RUC); err != nil {
 			return nil, fmt.Errorf("sri: Config.RUC: %w", err)
@@ -302,6 +306,11 @@ func Nuevo(cfg Config) (*Cliente, error) {
 	}
 	if cfg.Espera.Consultas < 1 {
 		cfg.Espera.Consultas = 1
+	}
+	if cfg.Espera.Consultas > 1 && cfg.Espera.Intervalo <= 0 {
+		// Sin intervalo, las consultas irían seguidas, sin dar tiempo al
+		// SRI a procesar (sección 7.4).
+		cfg.Espera.Intervalo = EsperaPorDefecto.Intervalo
 	}
 	c := &Cliente{cfg: cfg, ws: cfg.Servicios, ahora: time.Now}
 	if c.ws == nil {
@@ -332,7 +341,7 @@ func (c *Cliente) Servicios() *ws.Cliente { return c.ws }
 // Si el comprobante tiene errores de validación devuelve *ErrorValidacion
 // con todos los hallazgos; si no cumple el XSD, *esquema.ErrorValidacion.
 func (c *Cliente) Preparar(doc Comprobante) (*Resultado, error) {
-	if c.cfg.Certificado == nil {
+	if c.cfg.Certificado.Utilizable() != nil {
 		return nil, ErrSinCertificado
 	}
 	info := doc.Info()

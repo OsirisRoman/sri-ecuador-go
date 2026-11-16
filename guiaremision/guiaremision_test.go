@@ -47,7 +47,7 @@ func base(t *testing.T, inicio comprobante.Fecha) *guiaremision.GuiaRemision {
 			DirPartida:                      "Av. Eloy Alfaro 34 y Av. Libertad",
 			RazonSocialTransportista:        "TRANSPORTES DE PRUEBA S.A.",
 			TipoIdentificacionTransportista: comprobante.IDRuc,
-			RucTransportista:                "1790011674001",
+			RucTransportista:                "1790000001001",
 			ObligadoContabilidad:            "SI",
 			FechaIniTransporte:              inicio,
 			FechaFinTransporte:              inicio,
