@@ -8,7 +8,7 @@ Los cambios notables de cada versión. El formato sigue [Keep a Changelog](https
 
 ## v0.2.0 — sin publicar
 
-Corrige los hallazgos de una auditoría adversarial independiente de la v0.1.0. El detalle de cada hallazgo, la prueba que lo protege y lo que sigue abierto están en [`docs/auditoria-v0.1.0.md`](docs/auditoria-v0.1.0.md). Sigue basada en la ficha técnica v2.34.
+Corrige los hallazgos de dos auditorías adversariales independientes: la de la v0.1.0 y la de la candidata a esta versión. El detalle de cada hallazgo, la prueba que lo protege y lo que sigue abierto están en [`docs/auditoria-v0.1.0.md`](docs/auditoria-v0.1.0.md) y [`docs/auditoria-v0.2.0.md`](docs/auditoria-v0.2.0.md). Sigue basada en la ficha técnica v2.34.
 
 ### Cambios incompatibles
 
@@ -61,7 +61,7 @@ Comprobantes que la v0.1.0 firmaba ahora se rechazan o cambian de estado. Las re
 
 ### Limitaciones
 
-Las de la v0.1.0 siguen vigentes, salvo la nota de crédito 1.0.0, ya autorizada por el SRI. Una ronda en el ambiente de pruebas con este código confirmó la regla de base del IVA, el reenvío corregido con la misma clave y los dos criterios de redondeo del total ([`docs/pruebas-sri.md`](docs/pruebas-sri.md)). El SRI autoriza un centavo de diferencia en el IVA de una línea que `iva.valor` rechaza: el SDK es más estricto **por decisión** (D17), para evitar diferencias acumuladas. Sin observar en el SRI (pendiente 15): `iva.unico`, `totales.tarifa` y los estados intermedios.
+Las de la v0.1.0 siguen vigentes, salvo la nota de crédito 1.0.0, ya autorizada por el SRI. Una ronda en el ambiente de pruebas con este código confirmó la regla de base del IVA, el reenvío corregido con la misma clave y los dos criterios de redondeo del total ([`docs/pruebas-sri.md`](docs/pruebas-sri.md)). El SRI autoriza un centavo de diferencia en el IVA de una línea que `iva.valor` rechaza: el SDK es más estricto **por decisión** (D17), para evitar diferencias acumuladas. Su coste para quien parte de precios con IVA incluido: con el 15 %, `Calcular` no llega exactamente al 13 % de los precios finales (12,00 o 35,00, por ejemplo; el total difiere en un centavo) y `Validar` rechaza cualquier descomposición del 8,7 %. Sin observar en el SRI (pendiente 15): `iva.unico`, `totales.tarifa`, los estados intermedios, una nota de débito con ICE y varias autorizaciones para una clave. En un comprobante leído de XML, cambiar la tarifa de un ICE no actualiza su valor al recalcular: hay que ponerlo a cero. Una tarifa de ICE del 100 % se escribe `100`, no `100.00`.
 
 ## v0.1.0 — primera versión pública (pre-release) — 2026-11-15
 

@@ -8,11 +8,14 @@ package sri_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math/rand/v2"
 	"strings"
 	"testing"
 
 	sri "github.com/OsirisRoman/sri-ecuador-go"
 	"github.com/OsirisRoman/sri-ecuador-go/ws"
+	"github.com/OsirisRoman/sri-ecuador-go/xades"
 )
 
 // entrada compone una <autorizacion>. doc nil omite el comprobante.
@@ -250,6 +253,95 @@ func TestSinAutorizaciones(t *testing.T) {
 			}
 			if res, err := cl.ConsultarDocumento(ctx, b); err != nil || res.Estado != sri.EstadoRecibido {
 				t.Errorf("%s, %q: ConsultarDocumento: estado=%v err=%v", nombre, vacia, estado(res), err)
+			}
+		}
+	}
+}
+
+// Propiedad: el resultado no depende del orden en que llegan las
+// autorizaciones. Para conjuntos aleatorios de hasta cuatro, todas sus
+// permutaciones dan el mismo estado, la misma clase de error, el mismo
+// Verificado y el mismo mensaje; y un AUTORIZADO respecto de un documento
+// siempre contiene ese documento.
+func TestElResultadoNoDependeDelOrden(t *testing.T) {
+	a, b := versiones(t)
+	ctx := context.Background()
+	clave := claveDe(t, b)
+	tipos := []func(fecha, id string) string{
+		func(f, id string) string { return entrada("NO AUTORIZADO", f, a, id) },
+		func(f, id string) string { return entrada("NO AUTORIZADO", f, b, id) },
+		func(f, id string) string { return entrada("AUTORIZADO", f, a, id) },
+		func(f, id string) string { return entrada("AUTORIZADO", f, b, id) },
+		func(f, id string) string { return entrada("AUTORIZADO", f, nil, id) },
+		func(f, id string) string { return entrada("NO AUTORIZADO", f, nil, id) },
+		func(f, id string) string { return entrada("EN PROCESO", f, nil, id) },
+		func(f, id string) string { return entrada("EN REVISION", f, nil, id) },
+		func(f, id string) string { return entrada("NO AUTORIZADO", f, []byte("<factura><roto>"), id) },
+		func(f, id string) string { return entrada("AUTORIZADO", f, []byte("<factura><roto>"), id) },
+	}
+	resumen := func(res *sri.Resultado, err error) string {
+		clase := "nil"
+		switch {
+		case errors.Is(err, sri.ErrSinComprobante):
+			clase = "sin comprobante"
+		case errors.Is(err, sri.ErrEstadoIndeterminado):
+			clase = "indeterminado"
+		case errors.Is(err, sri.ErrDiscrepancia):
+			clase = "discrepancia"
+		case err != nil:
+			clase = err.Error()
+		}
+		// Entre varias autorizaciones equivalentes (dos AUTORIZADO sin
+		// vincular, por ejemplo) el mensaje puede ser el de cualquiera; el
+		// de un rechazo es siempre el más reciente.
+		m := ""
+		if res.Estado == sri.EstadoNoAutorizado {
+			m = mensaje(res)
+		}
+		return fmt.Sprintf("%v|%s|%v|%s", res.Estado, clase, res.Verificado, m)
+	}
+	r := rand.New(rand.NewPCG(3, 2026))
+	for caso := 0; caso < 60; caso++ {
+		n := 1 + r.IntN(4)
+		entradas := make([]string, n)
+		for i := range entradas {
+			// Fechas distintas: el desempate entre fechas iguales sí usa la posición.
+			entradas[i] = tipos[r.IntN(len(tipos))](fmt.Sprintf("2026-11-15T10:%02d:00-05:00", i), fmt.Sprintf("mensaje %d", i))
+		}
+		var referencia [3]string
+		for p := 0; p < 6; p++ {
+			orden := r.Perm(n)
+			var lista strings.Builder
+			for _, i := range orden {
+				lista.WriteString(entradas[i])
+			}
+			cl := servidorSRI(t, sobreRecepcion("RECIBIDA"), sobreAutorizacion("<autorizaciones>"+lista.String()+"</autorizaciones>"))
+			var obtenido [3]string
+			for k, consulta := range []func() (*sri.Resultado, error){
+				func() (*sri.Resultado, error) { return cl.ConsultarDocumento(ctx, b) },
+				func() (*sri.Resultado, error) { return cl.Reanudar(ctx, b, nil) },
+				func() (*sri.Resultado, error) { return cl.Autorizar(ctx, clave) },
+			} {
+				res, err := consulta()
+				if res == nil {
+					t.Fatalf("caso %d: resultado nil: %v", caso, err)
+				}
+				obtenido[k] = resumen(res, err)
+				if k < 2 && res.Autorizado() {
+					h1, _ := xades.Huella(b)
+					h2, errH := xades.Huella([]byte(res.Autorizacion.Comprobante))
+					if !res.Verificado || errH != nil || h1 != h2 || res.XMLAutorizado() == nil {
+						t.Fatalf("caso %d: AUTORIZADO sin el documento consultado\n%s", caso, lista.String())
+					}
+				}
+				if len(res.Autorizaciones) != n {
+					t.Fatalf("caso %d: %d autorizaciones en el resultado; llegaron %d", caso, len(res.Autorizaciones), n)
+				}
+			}
+			if p == 0 {
+				referencia = obtenido
+			} else if obtenido != referencia {
+				t.Fatalf("caso %d: el resultado depende del orden\nprimer orden: %v\norden %v: %v", caso, referencia, orden, obtenido)
 			}
 		}
 	}

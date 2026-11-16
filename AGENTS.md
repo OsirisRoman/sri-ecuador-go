@@ -13,6 +13,8 @@ Lo esencial, que no debes saltarte:
 - Solo `sri.EstadoAutorizado` es un comprobante válido. `RECIBIDO` es pendiente (se resuelve con `cliente.ConsultarDocumento`); un error de red o `sri.ErrEstadoIndeterminado` es estado desconocido y se reintenta con el **mismo** XML firmado, sin generar otra clave ni otro secuencial.
 - `sri.EstadoDiscrepancia` (`errors.Is(err, sri.ErrDiscrepancia)`) significa que el SRI tiene **otro** comprobante con esa clave: no entregues el XML enviado; el del SRI está en `res.Autorizacion`.
 - Un comprobante devuelto o no autorizado se corrige y se reenvía con la **misma** clave y el mismo secuencial (ficha 5.10): no vuelvas a llamar a `GenerarClaveAcceso`.
+- Después de cambiar una cantidad, un precio o una tarifa, vuelva a llamar a `Calcular`: recalcula todo lo que dedujo. La base o el valor de un ICE específico y de un IRBPNR los indica y los actualiza la aplicación.
+- Con `Reanudar`, `Emitir` y `ConsultarDocumento`, `sri.EstadoAutorizado` garantiza que el documento autorizado es el enviado (`res.Verificado`). `cliente.Autorizar(clave)` solo informa el estado de la clave. `sri.ErrSinComprobante` es un estado desconocido.
 - `Validar` (y `Preparar`) rechaza importes incoherentes aunque no vengan de `Calcular`; para una nota de crédito, usa `DesdeFactura` o `AsociarFactura` para que se contraste con su factura.
 - El secuencial lo asigna y lo guarda la aplicación, no el SDK.
 - Fecha de emisión con `comprobante.Hoy()` (hora de Ecuador).
@@ -54,5 +56,5 @@ gofmt -l <directorios del proyecto>  # no ejecutes gofmt sobre "." si existe res
 | Datos que caducan y cómo actualizarlos | `docs/actualizar-catalogos.md` |
 | Devolución automática de IVA (DIG), no implementada | `docs/devolucion-iva-dig.md` |
 | Fuentes y licencias | `docs/fuentes.md`, `NOTICE` |
-| Auditoría de v0.1.0 y certificación de 0.2.0 | `docs/auditoria-v0.1.0.md`, `docs/certificacion-v0.2.0.md` |
+| Auditorías de v0.1.0 y de la candidata a 0.2.0, y certificación de 0.2.0 | `docs/auditoria-v0.1.0.md`, `docs/auditoria-v0.2.0.md`, `docs/certificacion-v0.2.0.md` |
 | Revisar el SDK sin contexto previo | `docs/revision-independiente.md` |

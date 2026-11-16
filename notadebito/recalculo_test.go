@@ -219,3 +219,22 @@ func TestCalcularEsCoherenteConValidar(t *testing.T) {
 		}
 	}
 }
+
+// Con varios IVA, la aplicación debe repartir las bases: si las omite, la
+// nota no se emite sin IVA, sino que Validar lo señala.
+func TestVariosIVASinBases(t *testing.T) {
+	n := conImpuestos(t, "100.00", notadebito.ImpuestoIVA(comprobante.IVA15), notadebito.ImpuestoIVA(comprobante.IVA5))
+	if hs := validar(n); !hs.Tiene("totales.base") || hs.Err() == nil {
+		t.Errorf("falta el error totales.base: %v", hs)
+	}
+}
+
+// Un impuesto que se calculó como IVA y que la aplicación convierte en ICE
+// no conserva los importes del IVA como si los hubiera indicado.
+func TestImpuestoQueCambiaDeIVAaICE(t *testing.T) {
+	n := conImpuestos(t, "100.00", notadebito.ImpuestoIVA(comprobante.IVA15), notadebito.ImpuestoIVA(comprobante.IVA15))
+	imp := &n.InfoNotaDebito.Impuestos[0]
+	imp.Codigo, imp.CodigoPorcentaje, imp.Tarifa = comprobante.ImpuestoICE, "3031", d("10")
+	n.Calcular()
+	exigir(t, n, "100.00", "10.00", "110.00", "16.50", "126.50", "126.50")
+}

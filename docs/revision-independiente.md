@@ -34,6 +34,7 @@ El CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) ejecuta lo mis
 | Qué | Dónde |
 |---|---|
 | Hallazgos de la primera auditoría, su resolución, prueba y commit | [`auditoria-v0.1.0.md`](auditoria-v0.1.0.md) |
+| Hallazgos de la segunda auditoría (commit `4492c75`) y su resolución | [`auditoria-v0.2.0.md`](auditoria-v0.2.0.md) |
 | Pruebas de regresión de esos hallazgos | `*/importes_test.go`, `factura/propiedad_test.go`, `factura/certificacion_test.go`, `retencion/sustento_test.go`, `retencion/calcular_redondeo_test.go`, `notacredito/origen_test.go`, `autorizacion_test.go`, `robustez_test.go`, `xades/huella_test.go`, `internal/xmldom/atributos_test.go`, `ride/vistaprevia_test.go` |
 | Contraste con xmlsec1 y libxml2 | [`internal/interop`](../internal/interop/interop_test.go) |
 | Vectores independientes del lenguaje | [`vectores/`](../vectores/README.md) |

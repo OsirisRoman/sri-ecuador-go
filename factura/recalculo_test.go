@@ -309,3 +309,37 @@ func TestLimitesDelRecalculoDesdeXML(t *testing.T) {
 	f.Calcular()
 	exigirImportes(t, f, "1000.00", "500.00", "1500.00", "225.00", "1725.00", "1725.00")
 }
+
+// Un impuesto que se calculó como IVA y que la aplicación convierte en ICE
+// (cambiando el código y la tarifa) no conserva los importes del IVA como
+// si los hubiera indicado.
+func TestImpuestoQueCambiaDeIVAaICE(t *testing.T) {
+	f := base(t)
+	f.Detalles = []factura.Detalle{factura.LineaIVA("A", "Licor", d("1"), d("100.00"), comprobante.IVA15)}
+	f.Calcular()
+	iva := f.Detalles[0].Impuestos[0]
+	f.Detalles[0].Impuestos[0] = comprobante.Impuesto{} // se sustituye por un ICE…
+	f.Detalles[0].Impuestos[0] = iva
+	imp := &f.Detalles[0].Impuestos[0]
+	imp.Codigo, imp.CodigoPorcentaje, imp.Tarifa = comprobante.ImpuestoICE, "3031", d("75")
+	f.Detalles[0].Impuestos = append(f.Detalles[0].Impuestos, comprobante.Impuesto{Codigo: comprobante.ImpuestoIVA, CodigoPorcentaje: comprobante.IVA15})
+	f.Calcular()
+	exigirImportes(t, f, "100.00", "75.00", "175.00", "26.25", "201.25", "201.25")
+}
+
+// Copiar una línea ya calculada como plantilla de otra conserva lo que se
+// dedujo: la copia se recalcula con sus propios datos.
+func TestCopiarUnaLineaCalculada(t *testing.T) {
+	f := conICE(t, "10")
+	copia := f.Detalles[0]
+	copia.Impuestos = append([]comprobante.Impuesto(nil), copia.Impuestos...)
+	copia.CodigoPrincipal, copia.Cantidad = "LIC-2", d("1")
+	f.Detalles = append(f.Detalles, copia)
+	f.Calcular()
+	if a, b := f.Detalles[0].Impuestos[0], f.Detalles[1].Impuestos[0]; !a.Valor.Igual(d("750.00")) || !b.Valor.Igual(d("75.00")) {
+		t.Errorf("ICE de la línea original %s y de la copia %s; se esperaba 750.00 y 75.00", a.Valor, b.Valor)
+	}
+	if !f.InfoFactura.ImporteTotal.Igual(d("2213.75")) {
+		t.Errorf("importeTotal = %s", f.InfoFactura.ImporteTotal)
+	}
+}

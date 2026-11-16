@@ -17,6 +17,7 @@ La documentación oficial del SRI conserva la autoridad normativa; aquí se expl
 | [Capacidades y estado](capacidades.md) | Qué hace cada parte, con qué respaldo y qué límites |
 | [Pruebas contra el SRI](pruebas-sri.md) | Qué autorizó el SRI, en qué condiciones, y qué no se ha probado |
 | [Auditoría de v0.1.0](auditoria-v0.1.0.md) | Hallazgos de una auditoría independiente y cómo se resolvió cada uno |
+| [Segunda auditoría](auditoria-v0.2.0.md) | Hallazgos de la auditoría de la candidata a 0.2.0 y su resolución |
 | [Certificación de 0.2.0](certificacion-v0.2.0.md) | Resultados sanitizados de la ronda contra el SRI con el código de 0.2.0 |
 | [Revisión independiente](revision-independiente.md) | Cómo reproducir las comprobaciones y qué evidencia hay, para revisar el SDK sin contexto previo |
 | [Notas de versión](../CHANGELOG.md) | Cambios de cada versión |

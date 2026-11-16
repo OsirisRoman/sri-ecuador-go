@@ -65,6 +65,7 @@ func RecalcularImpuestos(anterior, total decimal.Decimal, impuestos []Impuesto) 
 		}
 		imp.BaseImponible = total.Sumar(ice).Redondear(2)
 		imp.Valor = imp.BaseImponible.Porcentaje(imp.Tarifa).Redondear(2)
+		imp.derivado.Deducido(imp.BaseImponible, imp.Valor, true)
 	}
 }
 

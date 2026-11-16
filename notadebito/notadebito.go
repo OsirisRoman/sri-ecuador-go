@@ -182,11 +182,16 @@ func (n *NotaDebito) Calcular() {
 		if t, ok := comprobante.TarifaIVADe(imp.CodigoPorcentaje); ok && t.Fija {
 			imp.Tarifa = t.Tarifa
 		}
-		if ivas == 1 {
+		// Con varios IVA, uno sin base toma el total, como si fuera el
+		// único: las bases sumarán de más y Validar lo señalará
+		// (totales.base) en vez de emitir la nota sin ese IVA.
+		deducida := ivas == 1 || imp.BaseImponible.EsCero()
+		if deducida {
 			imp.BaseImponible = info.TotalSinImpuestos.Sumar(ice)
 		}
 		imp.BaseImponible = imp.BaseImponible.Redondear(2)
 		imp.Valor = imp.BaseImponible.Porcentaje(imp.Tarifa).Redondear(2)
+		imp.derivado.Deducido(imp.BaseImponible, imp.Valor, deducida)
 		valor = valor.Sumar(imp.Valor)
 	}
 	for _, c := range info.Compensaciones {
