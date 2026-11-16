@@ -211,3 +211,98 @@ func estado(r *sri.Resultado) string {
 	}
 	return r.Estado.String()
 }
+
+// servidorSecuencial responde a la recepción con un sobre fijo y a cada
+// consulta de autorización con el siguiente de la lista (repite el último).
+func servidorSecuencial(t *testing.T, recepcion string, autorizaciones ...string) *sri.Cliente {
+	t.Helper()
+	mux := http.NewServeMux()
+	e := ws.EndpointsEn("")
+	n := 0
+	mux.HandleFunc(e.Recepcion, func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		io.WriteString(w, recepcion)
+	})
+	mux.HandleFunc(e.Autorizacion, func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		io.WriteString(w, autorizaciones[min(n, len(autorizaciones)-1)])
+		n++
+	})
+	s := httptest.NewServer(mux)
+	t.Cleanup(s.Close)
+	m, err := certprueba.Obtener()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := sri.Nuevo(sri.Config{Ambiente: comprobante.Pruebas, Certificado: m.Certificado,
+		Servicios: ws.Nuevo(comprobante.Pruebas, ws.ConEndpoints(ws.EndpointsEn(s.URL)), ws.ConReintentos(ws.Reintentos{Intentos: 1})),
+		Espera:    sri.Espera{Inicial: time.Millisecond, Intervalo: time.Millisecond, Consultas: 3}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func autorizacionCon(estado string, doc []byte) string {
+	return sobreAutorizacion(unaAutorizacion(estado, "<ambiente>PRUEBAS</ambiente><comprobante><![CDATA["+string(doc)+"]]></comprobante>"))
+}
+
+// versiones devuelve dos comprobantes firmados distintos con la misma
+// clave: el original (A) y su corrección (B).
+func versiones(t *testing.T) (a, b []byte) {
+	t.Helper()
+	c, _ := entorno(t, xades.SHA256)
+	fa := ejemplo.Factura(comprobante.Hoy(), "000000210")
+	fb := ejemplo.Factura(comprobante.Hoy(), "000000210")
+	fb.Detalles[0].PrecioUnitario = decimal.MustParse("20.00")
+	fb.Calcular()
+	fb.InfoTributaria.ClaveAcceso = fa.InfoTributaria.ClaveAcceso
+	pa, err := c.Preparar(fa)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pb, err := c.Preparar(fb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pa.XMLFirmado, pb.XMLFirmado
+}
+
+// Corrección según la ficha (5.10): A quedó NO AUTORIZADO; B, corregido y
+// con la misma clave, se recibe. Mientras el SRI procesa B, la autorización
+// puede mostrar todavía el resultado de A: eso no es una discrepancia.
+func TestCorreccionConLaMismaClave(t *testing.T) {
+	a, b := versiones(t)
+	ctx := context.Background()
+	reciboNuevo := sobreRecepcion("RECIBIDA")
+	enProceso := `<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><ns2:validarComprobanteResponse xmlns:ns2="http://ec.gob.sri.ws.recepcion"><RespuestaRecepcionComprobante><estado>DEVUELTA</estado><comprobantes><comprobante><claveAcceso>x</claveAcceso><mensajes><mensaje><identificador>70</identificador><mensaje>CLAVE DE ACCESO EN PROCESAMIENTO</mensaje><tipo>ERROR</tipo></mensaje></mensajes></comprobante></comprobantes></RespuestaRecepcionComprobante></ns2:validarComprobanteResponse></S:Body></S:Envelope>`
+	registrada := strings.Replace(enProceso, "<identificador>70</identificador><mensaje>CLAVE DE ACCESO EN PROCESAMIENTO", "<identificador>43</identificador><mensaje>CLAVE ACCESO REGISTRADA", 1)
+
+	// El SRI termina de procesar B y lo autoriza.
+	cl := servidorSecuencial(t, reciboNuevo, autorizacionCon("NO AUTORIZADO", a), autorizacionCon("AUTORIZADO", b))
+	if res, err := cl.Reanudar(ctx, b, nil); err != nil || !res.Autorizado() || !res.Verificado {
+		t.Errorf("B corregido y autorizado: estado=%v err=%v", estado(res), err)
+	}
+	// Mientras solo se ve el NO AUTORIZADO de A, B queda pendiente, sin error.
+	cl = servidorSecuencial(t, reciboNuevo, autorizacionCon("NO AUTORIZADO", a))
+	if res, err := cl.Reanudar(ctx, b, nil); err != nil || res.Estado != sri.EstadoRecibido || res.Autorizacion != nil {
+		t.Errorf("B en proceso: estado=%v err=%v", estado(res), err)
+	}
+	// Con el código 70 (B en procesamiento) ocurre lo mismo, y el NO
+	// AUTORIZADO de B sí es el resultado de B.
+	cl = servidorSecuencial(t, enProceso, autorizacionCon("NO AUTORIZADO", a), autorizacionCon("NO AUTORIZADO", b))
+	if res, err := cl.Reanudar(ctx, b, nil); err != nil || res.Estado != sri.EstadoNoAutorizado || !res.Verificado {
+		t.Errorf("B no autorizado: estado=%v err=%v", estado(res), err)
+	}
+	// Un 43 dice que la clave ya está registrada, y B no se recibió: el NO
+	// AUTORIZADO de A es una discrepancia, que se resuelve reenviando.
+	cl = servidorSecuencial(t, registrada, autorizacionCon("NO AUTORIZADO", a))
+	if res, err := cl.Reanudar(ctx, b, nil); !errors.Is(err, sri.ErrDiscrepancia) || res.Estado != sri.EstadoDiscrepancia {
+		t.Errorf("43 con otra versión: estado=%v err=%v", estado(res), err)
+	}
+	// Una versión anterior AUTORIZADA es siempre una discrepancia.
+	cl = servidorSecuencial(t, reciboNuevo, autorizacionCon("AUTORIZADO", a))
+	if res, err := cl.Reanudar(ctx, b, nil); !errors.Is(err, sri.ErrDiscrepancia) || res.Estado != sri.EstadoDiscrepancia {
+		t.Errorf("A autorizado: estado=%v err=%v", estado(res), err)
+	}
+}
