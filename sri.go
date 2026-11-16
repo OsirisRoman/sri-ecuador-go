@@ -203,8 +203,9 @@ var (
 // documento (Resultado.Autorizacion.Estado): si está autorizado, ese es el
 // comprobante válido y lo que corresponde es conservarlo
 // (Resultado.Autorizacion.Comprobante) y, si hacía falta corregirlo, emitir
-// una nota de crédito o de débito; si no está autorizado, corregirlo y
-// reenviarlo con la misma clave (ficha técnica 5.10).
+// una nota de crédito o de débito; si no está autorizado, enviar este
+// documento (corregido) con Reanudar, que es seguro: si el SRI ya lo tiene
+// en proceso, el resultado será pendiente y no se duplica (ficha 5.10).
 type ErrorDiscrepancia struct {
 	ClaveAcceso string
 	// EstadoSRI es el estado que el SRI informa del documento registrado.
@@ -414,9 +415,32 @@ func (c *Cliente) Reanudar(ctx context.Context, xmlFirmado []byte, advertencias 
 	if err != nil || res.Estado == EstadoDevuelto {
 		return res, err
 	}
-	aut, err := c.esperarAutorizacion(ctx, res.ClaveAcceso)
+	// Si el SRI acaba de recibir este documento (RECIBIDA, o 70: en
+	// procesamiento), un NO AUTORIZADO de otra versión con la misma clave
+	// es el resultado anterior a la corrección (ficha 5.10 y 5.11): se
+	// sigue esperando el de este documento.
+	var ajeno func(*Resultado) bool
+	if recibidoAhora(res.Recepcion) {
+		enviado, errH := xades.Huella(xmlFirmado)
+		if errH != nil {
+			return res, fmt.Errorf("sri: el documento firmado es ilegible: %w", errH)
+		}
+		ajeno = func(r *Resultado) bool {
+			if r.Estado != EstadoNoAutorizado || r.Autorizacion == nil || strings.TrimSpace(r.Autorizacion.Comprobante) == "" {
+				return false
+			}
+			h, err := xades.Huella([]byte(strings.TrimSpace(r.Autorizacion.Comprobante)))
+			return err == nil && h != enviado
+		}
+	}
+	aut, err := c.esperarAutorizacion(ctx, res.ClaveAcceso, ajeno)
 	if aut == nil {
 		return res, err
+	}
+	if err == nil && ajeno != nil && ajeno(aut) {
+		// Agotadas las consultas, el SRI solo muestra el resultado de la
+		// versión anterior: este documento sigue pendiente.
+		aut.Estado, aut.Autorizacion, aut.Mensajes = EstadoRecibido, nil, nil
 	}
 	aut.Recepcion = res.Recepcion
 	aut.Advertencias = advertencias
@@ -572,7 +596,30 @@ func mismoAmbiente(texto string, a comprobante.Ambiente) bool {
 	return false
 }
 
-func (c *Cliente) esperarAutorizacion(ctx context.Context, claveAcceso string) (*Resultado, error) {
+// recibidoAhora informa si la recepción aceptó el documento en este envío
+// (RECIBIDA) o lo tiene en procesamiento (código 70), a diferencia del 43,
+// que solo dice que la clave ya está registrada.
+func recibidoAhora(rec *ws.RespuestaRecepcion) bool {
+	if rec == nil {
+		return false
+	}
+	if rec.Recibida() {
+		return true
+	}
+	if !rec.YaRecibido() {
+		return false
+	}
+	for _, m := range rec.Mensajes() {
+		if m.EsError() && strings.TrimSpace(m.Identificador) != ws.CodClaveEnProcesamiento {
+			return false
+		}
+	}
+	return true
+}
+
+// esperarAutorizacion consulta hasta obtener un resultado. Si ajeno no es
+// nil, un resultado para el que devuelve true se trata como pendiente.
+func (c *Cliente) esperarAutorizacion(ctx context.Context, claveAcceso string, ajeno func(*Resultado) bool) (*Resultado, error) {
 	e := c.cfg.Espera
 	if err := c.dormir(ctx, e.Inicial); err != nil {
 		return nil, err
@@ -588,7 +635,8 @@ func (c *Cliente) esperarAutorizacion(ctx context.Context, claveAcceso string) (
 			return ultimo, err
 		}
 		ultimo = res
-		if !res.Pendiente() || i >= e.Consultas {
+		pendiente := res.Pendiente() || (ajeno != nil && ajeno(res))
+		if !pendiente || i >= e.Consultas {
 			return res, nil
 		}
 		if err := c.dormir(ctx, intervalo); err != nil {
