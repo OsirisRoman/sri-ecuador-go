@@ -99,14 +99,24 @@ func ejecutar() error {
 	// proceso se cae a mitad del envío, con esto se reanuda sin duplicar.
 	guardar(claveAcceso, "FIRMADO", prep.XMLFirmado)
 
-	// 5. Enviar y esperar la autorización. Reanudar es idempotente: puede
-	// repetirse con el mismo XML firmado las veces que haga falta.
+	// 5. Enviar y esperar la autorización. Reanudar puede repetirse con el
+	// mismo XML firmado las veces que haga falta, y comprueba que lo que
+	// autorizó el SRI sea ese mismo documento.
 	ctx, cancelar := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancelar()
 	res, err := cliente.Reanudar(ctx, prep.XMLFirmado, prep.Advertencias)
+	if errors.Is(err, sri.ErrDiscrepancia) {
+		// El SRI tiene registrado con esta clave OTRO comprobante (por
+		// ejemplo, una versión anterior que sí llegó). Su estado está en
+		// res.Autorizacion; este documento no se entrega.
+		guardar(claveAcceso, "DISCREPANCIA", prep.XMLFirmado)
+		return fmt.Errorf("el SRI tiene otro comprobante con la clave %s (estado %s); revisar antes de corregir o reenviar: %w",
+			claveAcceso, res.Autorizacion.Estado, err)
+	}
 	if err != nil {
-		// Fallo de comunicación: el estado es DESCONOCIDO. No genere otra
-		// clave ni otro secuencial; reintente Reanudar más tarde.
+		// Fallo de comunicación o respuesta que no permite saber el estado
+		// (sri.ErrEstadoIndeterminado): el estado es DESCONOCIDO. No genere
+		// otra clave ni otro secuencial; reintente Reanudar más tarde.
 		return fmt.Errorf("sin respuesta del SRI, reintentar con el mismo XML: %w", err)
 	}
 
@@ -125,12 +135,14 @@ func ejecutar() error {
 		// correo u otro medio).
 	case sri.EstadoRecibido:
 		// El SRI lo aceptó pero aún no resuelve. No es un comprobante
-		// válido todavía: consultar más tarde con cliente.Autorizar(clave).
+		// válido todavía: consultar más tarde con
+		// cliente.ConsultarDocumento(ctx, xmlFirmado).
 		guardar(claveAcceso, "RECIBIDO", prep.XMLFirmado)
 		fmt.Println("RECIBIDO: pendiente de autorización; consultar más tarde")
 	case sri.EstadoDevuelto, sri.EstadoNoAutorizado:
-		// Rechazado. Corregir la causa y volver a emitir: el secuencial
-		// puede reutilizarse.
+		// Rechazado. Corregir la causa y reenviar con la MISMA clave y el
+		// mismo secuencial (ficha técnica 5.10): cambiar los datos, Calcular
+		// sin volver a generar la clave, Preparar y Reanudar.
 		guardar(claveAcceso, res.Estado.String(), prep.XMLFirmado)
 		for _, m := range res.Mensajes {
 			fmt.Println("  SRI:", m.Tipo, m)

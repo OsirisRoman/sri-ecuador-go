@@ -59,4 +59,4 @@ Validar contra los XSD oficiales exige un validador de XML Schema 1.0, que la bi
 Las que siguen están desarrolladas, con lo que falta para resolverlas, en `pendientes.md`.
 
 - **Nota de crédito y `valorDevolucionIva`:** el SRI publica dos XSD de nota de crédito incompatibles: `NotaCredito_V*` admite `agenteRetencion`/`contribuyenteRimpe` pero no `valorDevolucionIva`; `NOTA_CREDITO-*` hace lo contrario. El SDK usa el primero, con el que el SRI autorizó las pruebas. Falta determinar cómo se emite una nota de crédito con devolución de IVA. (El XSD de nota de débito `NotaDebito_V1.0.0` sí admite ambos.)
-- **Estados de autorización:** la ficha muestra `RECHAZADO` en un ejemplo; el servicio real responde `NO AUTORIZADO`. El cliente trata como no autorizado todo estado resuelto que no sea `AUTORIZADO`.
+- **Estados de autorización:** la ficha muestra `RECHAZADO` en un ejemplo y las siglas PPR, AUT y NAT en la Tabla 6; el servicio real responde `NO AUTORIZADO`. El cliente acepta todas esas formas y trata cualquier otro estado como desconocido (ver D8), nunca como rechazo.

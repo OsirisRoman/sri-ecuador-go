@@ -22,6 +22,7 @@ Módulo: `github.com/OsirisRoman/sri-ecuador-go`. Documentación en español.
 - [Pendientes y oportunidades de contribución](docs/pendientes.md)
 - [Cómo contribuir](CONTRIBUTING.md)
 - [Pruebas contra el SRI real](docs/pruebas-sri.md)
+- [Auditoría de v0.1.0 y su resolución](docs/auditoria-v0.1.0.md)
 - [Decisiones de diseño](docs/decisiones.md)
 - [Datos que caducan y cómo actualizarlos](docs/actualizar-catalogos.md)
 - [Devolución automática de IVA (DIG): no implementada; investigación](docs/devolucion-iva-dig.md)
