@@ -263,13 +263,15 @@ func (c *ComprobanteRetencion) Calcular() {
 		total := d.TotalSinImpuestos
 		for j := range d.ImpuestosDocSustento {
 			imp := &d.ImpuestosDocSustento[j]
+			// La base se redondea antes de calcular el impuesto: Validar
+			// recalcula sobre la base escrita en el XML.
+			imp.BaseImponible = imp.BaseImponible.Redondear(2)
 			if imp.CodImpuestoDocSustento == comprobante.ImpuestoIVA {
 				if t, ok := comprobante.TarifaIVADe(imp.CodigoPorcentaje); ok && t.Fija {
 					imp.Tarifa = t.Tarifa
 				}
 				imp.ValorImpuesto = imp.BaseImponible.Porcentaje(imp.Tarifa)
 			}
-			imp.BaseImponible = imp.BaseImponible.Redondear(2)
 			imp.ValorImpuesto = imp.ValorImpuesto.Redondear(2)
 			total = total.Sumar(imp.ValorImpuesto)
 		}
