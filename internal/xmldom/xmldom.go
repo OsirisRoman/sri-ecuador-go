@@ -69,11 +69,19 @@ type Documento struct {
 	Raiz *Elemento
 }
 
+// bomUTF8 es la marca de orden de bytes de UTF-8.
+var bomUTF8 = []byte{0xEF, 0xBB, 0xBF}
+
 // Analizar construye el árbol de un documento XML.
+//
+// Se admite una marca de orden de bytes (BOM) de UTF-8 al principio: es la
+// firma de codificación que XML 1.0 permite (sección 4.3.3), no forma parte
+// del documento y la escriben por defecto varias plataformas.
 func Analizar(datos []byte) (*Documento, error) {
 	if len(datos) > MaxBytes {
 		return nil, ErrDemasiado
 	}
+	datos = bytes.TrimPrefix(datos, bomUTF8)
 	dec := xml.NewDecoder(bytes.NewReader(datos))
 	dec.Strict = true
 	// Solo UTF-8 (y su subconjunto ASCII): es la codificación que exige la
@@ -88,6 +96,18 @@ func Analizar(datos []byte) (*Documento, error) {
 	var doc Documento
 	var actual *Elemento
 	prof := 0
+	// Los fragmentos de texto contiguos (texto, CDATA, texto separado por
+	// comentarios) forman un solo nodo. Se acumulan aquí y se añaden al
+	// elemento de una vez: concatenarlos uno a uno costaría un tiempo
+	// cuadrático con muchos fragmentos.
+	var texto []byte
+	hayTexto := false
+	volcar := func() {
+		if hayTexto {
+			actual.Hijos = append(actual.Hijos, Texto(texto))
+			texto, hayTexto = texto[:0], false
+		}
+	}
 	for {
 		ini := dec.InputOffset()
 		tok, err := dec.RawToken()
@@ -102,6 +122,7 @@ func Analizar(datos []byte) (*Documento, error) {
 			if prof++; prof > MaxProfundidad {
 				return nil, ErrDemasiado
 			}
+			volcar()
 			if actual == nil && doc.Raiz != nil {
 				return nil, fmt.Errorf("%w: más de un elemento raíz", ErrMalFormado)
 			}
@@ -139,23 +160,18 @@ func Analizar(datos []byte) (*Documento, error) {
 			if actual == nil || actual.Prefijo != t.Name.Space || actual.Local != t.Name.Local {
 				return nil, fmt.Errorf("%w: cierre </%s> inesperado", ErrMalFormado, t.Name.Local)
 			}
+			volcar()
 			actual = actual.Padre
 			prof--
 		case xml.CharData:
 			if actual != nil {
-				// Los fragmentos contiguos (texto + CDATA) se fusionan.
-				if n := len(actual.Hijos); n > 0 {
-					if prev, ok := actual.Hijos[n-1].(Texto); ok {
-						actual.Hijos[n-1] = prev + Texto(t)
-						continue
-					}
-				}
-				actual.Hijos = append(actual.Hijos, Texto(t))
+				texto, hayTexto = append(texto, t...), true
 			} else if len(bytes.TrimSpace(t)) != 0 {
 				return nil, fmt.Errorf("%w: texto fuera del elemento raíz", ErrMalFormado)
 			}
 		case xml.ProcInst:
 			if actual != nil && t.Target != "xml" {
+				volcar()
 				actual.Hijos = append(actual.Hijos, InstruccionProc{Destino: t.Target, Datos: string(t.Inst)})
 			}
 		case xml.Directive:
@@ -433,14 +449,51 @@ func Canonicalizar(e *Elemento, excluir *Elemento) []byte {
 			}
 		}
 	}
-	canon(&buf, e, excluir, enAmbito, map[string]string{}, heredados)
+	c := canonizador{buf: &buf, excluir: excluir, enAmbito: enAmbito, emitidos: map[string]string{}}
+	// El vértice escribe todos los espacios de nombres en ámbito.
+	prefijos := make([]string, 0, len(enAmbito))
+	for p := range enAmbito {
+		prefijos = append(prefijos, p)
+	}
+	c.elemento(e, prefijos, heredados)
 	return buf.Bytes()
 }
 
-// canon escribe e. enAmbito son los espacios visibles en e (incluidos los
-// propios); emitidos, los que ya quedaron escritos por un ancestro dentro de
-// la salida.
-func canon(buf *bytes.Buffer, e, excluir *Elemento, enAmbito, emitidos map[string]string, extra []Atributo) {
+// canonizador escribe la forma canónica de un subárbol. El coste es
+// proporcional al tamaño del subárbol: en cada elemento solo se examinan
+// las declaraciones de espacios de nombres del propio elemento, porque las
+// que hereda ya las escribió un ancestro (en C14N inclusiva, todo espacio
+// en ámbito se escribe en el primer elemento de la salida que lo ve).
+type canonizador struct {
+	buf     *bytes.Buffer
+	excluir *Elemento
+	// enAmbito son los espacios de nombres visibles en el elemento que se
+	// está escribiendo; emitidos, los ya escritos por él o por un ancestro
+	// dentro de la salida. Se modifican al entrar en un elemento y se
+	// restauran al salir.
+	enAmbito, emitidos map[string]string
+}
+
+// previo es el valor que tenía una clave de un mapa antes de cambiarla.
+type previo struct {
+	mapa   map[string]string
+	clave  string
+	valor  string
+	existe bool
+}
+
+func fijar(deshacer []previo, m map[string]string, k, v string) []previo {
+	ant, ok := m[k]
+	m[k] = v
+	return append(deshacer, previo{m, k, ant, ok})
+}
+
+// elemento escribe e. candidatos son los prefijos cuya declaración puede
+// hacer falta escribir aquí: todos los que están en ámbito para el vértice,
+// y los que declara el propio elemento para los demás. c.enAmbito ya
+// incluye las declaraciones de e.
+func (c *canonizador) elemento(e *Elemento, candidatos []string, extra []Atributo) {
+	buf := c.buf
 	nombre := e.Local
 	if e.Prefijo != "" {
 		nombre = e.Prefijo + ":" + e.Local
@@ -448,43 +501,32 @@ func canon(buf *bytes.Buffer, e, excluir *Elemento, enAmbito, emitidos map[strin
 	buf.WriteByte('<')
 	buf.WriteString(nombre)
 
-	// Declaraciones de espacios de nombres: todo lo que está en ámbito y no
-	// fue emitido con el mismo valor por el ancestro de salida más cercano.
-	misEmitidos := emitidos
-	var prefijos []string
-	for p, u := range enAmbito {
+	// Declaraciones de espacios de nombres: lo que está en ámbito y no fue
+	// emitido con el mismo valor por el ancestro de salida más cercano.
+	var deshacer []previo
+	sort.Strings(candidatos) // "" (xmlns por defecto) ordena primero
+	for _, p := range candidatos {
+		u := c.enAmbito[p]
 		if p == "xml" {
 			continue
 		}
-		if prev, ok := emitidos[p]; ok && prev == u {
+		prev, ok := c.emitidos[p]
+		if ok && prev == u {
 			continue
 		}
-		if p == "" && u == "" {
+		if p == "" && u == "" && (!ok || prev == "") {
 			// xmlns="" solo se escribe para anular un valor por defecto
 			// no vacío ya emitido.
-			if prev, ok := emitidos[""]; !ok || prev == "" {
-				continue
-			}
+			continue
 		}
-		prefijos = append(prefijos, p)
-	}
-	if len(prefijos) > 0 {
-		sort.Strings(prefijos) // "" (xmlns por defecto) ordena primero
-		misEmitidos = make(map[string]string, len(emitidos)+len(prefijos))
-		for p, u := range emitidos {
-			misEmitidos[p] = u
+		deshacer = fijar(deshacer, c.emitidos, p, u)
+		if p == "" {
+			buf.WriteString(` xmlns="`)
+		} else {
+			buf.WriteString(" xmlns:" + p + `="`)
 		}
-		for _, p := range prefijos {
-			u := enAmbito[p]
-			misEmitidos[p] = u
-			if p == "" {
-				buf.WriteString(` xmlns="`)
-			} else {
-				buf.WriteString(" xmlns:" + p + `="`)
-			}
-			escAttr(buf, u)
-			buf.WriteByte('"')
-		}
+		escAttr(buf, u)
+		buf.WriteByte('"')
 	}
 
 	// Atributos ordenados por (URI del espacio de nombres, nombre local);
@@ -499,7 +541,7 @@ func canon(buf *bytes.Buffer, e, excluir *Elemento, enAmbito, emitidos map[strin
 		if a.Prefijo == "xml" {
 			uri = XMLNamespace
 		} else if a.Prefijo != "" {
-			uri = enAmbito[a.Prefijo]
+			uri = c.enAmbito[a.Prefijo]
 		}
 		attrs = append(attrs, attrOrd{uri, a})
 	}
@@ -532,23 +574,34 @@ func canon(buf *bytes.Buffer, e, excluir *Elemento, enAmbito, emitidos map[strin
 			}
 			buf.WriteString("?>")
 		case *Elemento:
-			if n == excluir {
+			if n == c.excluir {
 				continue
 			}
-			ambitoHijo := enAmbito
-			if len(n.NS) > 0 {
-				ambitoHijo = make(map[string]string, len(enAmbito)+len(n.NS))
-				for p, u := range enAmbito {
-					ambitoHijo[p] = u
-				}
-				for p, u := range n.NS {
-					ambitoHijo[p] = u
-				}
+			var prefijos []string
+			marca := len(deshacer)
+			for p, u := range n.NS {
+				prefijos = append(prefijos, p)
+				deshacer = fijar(deshacer, c.enAmbito, p, u)
 			}
-			canon(buf, n, excluir, ambitoHijo, misEmitidos, nil)
+			c.elemento(n, prefijos, nil)
+			deshacer = restaurar(deshacer, marca)
 		}
 	}
+	restaurar(deshacer, 0)
 	buf.WriteString("</" + nombre + ">")
+}
+
+// restaurar deshace, del último al primero, los cambios anotados a partir
+// de la posición desde.
+func restaurar(deshacer []previo, desde int) []previo {
+	for i := len(deshacer) - 1; i >= desde; i-- {
+		if d := deshacer[i]; d.existe {
+			d.mapa[d.clave] = d.valor
+		} else {
+			delete(d.mapa, d.clave)
+		}
+	}
+	return deshacer[:desde]
 }
 
 func escTexto(buf *bytes.Buffer, s string) {

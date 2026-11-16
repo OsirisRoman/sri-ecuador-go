@@ -285,3 +285,21 @@ func TestRimpeNegocioPopular(t *testing.T) {
 		t.Error("el XSD publicado dejó de rechazar la leyenda: revise si el ajuste sigue siendo necesario")
 	}
 }
+
+// Segunda auditoría, N-06: un comprobante con la marca de orden de bytes
+// (BOM) de UTF-8 delante, como los escriben algunas plataformas, se lee
+// igual que sin ella.
+func TestParseConBOM(t *testing.T) {
+	doc, err := base(t).XML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := factura.Parse(append([]byte{0xEF, 0xBB, 0xBF}, doc...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	otra, err := f.XML()
+	if err != nil || string(otra) != string(doc) {
+		t.Errorf("la factura leída con BOM no es la misma: %v", err)
+	}
+}

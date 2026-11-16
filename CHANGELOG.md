@@ -23,6 +23,7 @@ Comprobantes que la v0.1.0 firmaba ahora se rechazan o cambian de estado. Las re
 - **`Calcular` recalcula lo que dedujo:** en la v0.1.0, el ICE y el IRBPNR deducidos y el total de un pago único se conservaban al volver a llamar a `Calcular`; ahora siguen a los datos del comprobante. Lo que indica la aplicación se respeta como antes. En la nota de débito, la base de un único IVA se deduce siempre (total sin impuestos más ICE), aunque la aplicación hubiera escrito otra.
 - **`AUTORIZADO` sin comprobante ya no es `EstadoAutorizado`** en `Reanudar`, `Emitir` y `ConsultarDocumento`: queda `EstadoRecibido` con el nuevo `ErrSinComprobante` (que también es `ErrEstadoIndeterminado`), porque no se puede comprobar qué documento autorizó el SRI. En esos métodos `EstadoAutorizado` implica ahora `Verificado`. `Resultado.XMLAutorizado` devuelve nil si la autorización no trae el comprobante (antes envolvía el XML local). El SRI real siempre lo ha devuelto.
 - **Varias autorizaciones para una clave:** el resultado ya no es el de la última de la lista sino el de la que contiene el documento enviado; `Autorizar` (solo clave) informa, entre varios rechazos, el de fecha más reciente. `ws.RespuestaAutorizacion.EnProceso` deja de depender de la posición.
+- `xades.Verificar` rechaza una firma con más de 16 referencias o 16 certificados (`xades.MaxReferencias`, `xades.MaxCertificados`); una firma del SRI lleva 3 referencias.
 - `sri.Nuevo` rechaza un `Certificado` sin clave privada; `ws.Lote.XML` exige un RUC válido; `ride.Generar` marca como vista previa lo que no viene con la autorización ni con `Opciones.FechaAutorizacion`, y rechaza logotipos de más de 25 megapíxeles.
 
 ### Añadido
@@ -45,6 +46,8 @@ Comprobantes que la v0.1.0 firmaba ahora se rechazan o cambian de estado. Las re
 - `notadebito.Calcular` calculaba el IVA sin incluir el ICE en la base: 125,00 en lugar de 126,50 para 100,00 con ICE del 10 % e IVA del 15 % (N-02).
 - Las compensaciones se restaban del importe total sin ninguna comprobación (N-05).
 - Con varias autorizaciones para una clave se tomaba como vigente la última de la lista: si el SRI las devolviera con la más reciente primero, el rechazo de una corrección quedaba como pendiente o como discrepancia (segunda auditoría, N-03). Un `AUTORIZADO` sin comprobante se daba por autorizado sin poder verificarlo (N-08).
+- Canonicalizar costaba un tiempo cuadrático con muchos espacios de nombres en ámbito, y analizar, con texto partido en muchas secciones CDATA o comentarios: un XML hostil de 467 kB ocupaba 19,5 s de CPU en `xades.Verificar` o `xades.Huella`. Ahora el coste es proporcional al tamaño. Una firma con miles de referencias al documento entero multiplicaba el coste de verificarla (segunda auditoría, N-04).
+- Un comprobante con la marca de orden de bytes (BOM) de UTF-8 al principio se rechazaba en `Verificar`, `Parse` y el RIDE (N-06).
 - `retencion.Calcular` calculaba el IVA del sustento sobre la base sin redondear.
 - Retenciones con bases mayores que el sustento y notas de crédito mayores que la factura pasaban sin hallazgos (AUD-004).
 - `XMLAutorizado` no escapaba los campos de la autorización (AUD-006).
