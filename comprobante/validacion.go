@@ -117,14 +117,20 @@ func (v *Validador) Advertirf(campo, regla, formato string, args ...any) {
 func (v *Validador) Hallazgos() Hallazgos { return v.hs }
 
 // Texto valida un campo alfanumérico: obligatoriedad, longitud máxima en
-// caracteres y las dos causas de rechazo de esquema que la ficha técnica
-// destaca en el Anexo 1: saltos de línea y espacios sobrantes.
+// caracteres, caracteres representables en XML y las dos causas de rechazo
+// de esquema que la ficha técnica destaca en el Anexo 1: saltos de línea y
+// espacios sobrantes.
 func (v *Validador) Texto(campo, valor string, obligatorio bool, max int) {
 	if valor == "" {
 		if obligatorio {
 			v.Errorf(campo, "requerido", "es obligatorio")
 		}
 		return
+	}
+	if r, ok := CaracterInvalido(valor); ok {
+		// encoding/xml sustituiría el carácter por U+FFFD sin avisar: el
+		// documento firmado no diría lo que entregó la aplicación.
+		v.Errorf(campo, "caracter-invalido", "contiene el carácter %U, que XML 1.0 no admite (o UTF-8 mal formado)", r)
 	}
 	if n := utf8.RuneCountInString(valor); n > max {
 		v.Errorf(campo, "longitud", "tiene %d caracteres; el máximo es %d", n, max)
@@ -135,6 +141,26 @@ func (v *Validador) Texto(campo, valor string, obligatorio bool, max int) {
 	if strings.TrimSpace(valor) != valor {
 		v.Errorf(campo, "espacios", "no puede empezar ni terminar con espacios")
 	}
+}
+
+// CaracterInvalido devuelve el primer carácter de s que no puede escribirse
+// en un documento XML 1.0 (sección 2.2 de la recomendación: controles C0
+// distintos de tabulador, salto de línea y retorno, sustitutos y U+FFFE,
+// U+FFFF), o utf8.RuneError si s no es UTF-8 válido.
+func CaracterInvalido(s string) (rune, bool) {
+	for i, r := range s {
+		if r == utf8.RuneError {
+			if _, n := utf8.DecodeRuneInString(s[i:]); n <= 1 {
+				return r, true
+			}
+		}
+		switch {
+		case r == '\t' || r == '\n' || r == '\r':
+		case r < 0x20, r >= 0xD800 && r <= 0xDFFF, r == 0xFFFE, r == 0xFFFF:
+			return r, true
+		}
+	}
+	return 0, false
 }
 
 // Digitos valida un campo numérico de longitud exacta.
@@ -267,7 +293,7 @@ func (v *Validador) Pagos(campo string, pagos []Pago, importe decimal.Decimal, o
 	suma := decimal.Cero
 	for i, pg := range pagos {
 		p := fmt.Sprintf("%s[%d].", campo, i)
-		switch _, enTabla := FormasPago[pg.FormaPago]; {
+		switch _, enTabla := formasPago[pg.FormaPago]; {
 		case !formaPagoXSD(pg.FormaPago):
 			v.Errorf(p+"formaPago", "catalogo", "código %q inválido (Tabla 24)", pg.FormaPago)
 		case !enTabla:
@@ -289,7 +315,7 @@ func (v *Validador) Pais(campo, codigo string) {
 	if codigo == "" || !v.Digitos(campo, codigo, 3) {
 		return
 	}
-	if _, ok := Paises[codigo]; !ok {
+	if _, ok := paises[codigo]; !ok {
 		v.Advertirf(campo, "pais.catalogo", "el código %s no figura en la Tabla 25; el SRI usa los códigos de país del Catálogo ATS, no los de ISO 3166, y rechaza los desconocidos (error 52)", codigo)
 	}
 }

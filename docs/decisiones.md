@@ -26,8 +26,9 @@ El SRI asigna RUC que no cumplen el módulo 11 clásico; exigirlo rechazaría co
 ## D7. Ajustes a los XSD publicados, explícitos y en memoria
 El XSD publicado solo admite `CONTRIBUYENTE RÉGIMEN RIMPE`, pero el Anexo 22 exige además `CONTRIBUYENTE NEGOCIO POPULAR - RÉGIMEN RIMPE`. Los archivos se incrustan intactos; la corrección se aplica al cargar y está declarada en `esquema.Ajustes`. `esquema.ValidarEstricto` usa los archivos literales. **(revisable)**: falta confirmar con el SRI real, lo que requiere un emisor que sea negocio popular.
 
-## D8. Reintentar el envío es seguro
-Reenviar un comprobante ya recibido no lo duplica: el SRI responde 43 o 70 (el 43 está confirmado con el SRI real). El cliente lo interpreta como «ya recibido» y pasa a consultar la autorización, lo que hace idempotente a `Reanudar`.
+## D8. Reintentar el envío es seguro, y el resultado se contrasta con lo enviado
+Reenviar un comprobante ya recibido no lo duplica: el SRI responde 43 o 70 (el 43 está confirmado con el SRI real). El cliente lo interpreta como «ya recibido» y pasa a consultar la autorización, lo que hace idempotente a `Reanudar` **para el mismo documento**.
+Un 43 no prueba que el SRI tenga ese documento: la ficha (5.10) obliga a reenviar un comprobante corregido con la misma clave, así que puede haber otra versión registrada. Por eso `Reanudar` y `ConsultarDocumento` comparan el comprobante que devuelve la autorización con el enviado mediante `xades.Huella` (SHA-256 de la forma canónica sin la firma: lo que firma la referencia `#comprobante`). Se descartaron la comparación byte a byte (el SRI podría reserializar) y la de `SignatureValue` (dos firmas del mismo contenido serían una «discrepancia» falsa). Si difieren, el resultado es `EstadoDiscrepancia`. Un estado de autorización vacío o desconocido, o una respuesta de otra clave o de otro ambiente, se trata como desconocido (`EstadoRecibido` con error) y nunca como rechazo.
 
 ## D9. El ambiente es obligatorio y se comprueba
 `sri.Config.Ambiente` no tiene valor por defecto y el cliente rechaza comprobantes de otro ambiente. Un ambiente desconocido nunca resuelve a las direcciones de producción.
