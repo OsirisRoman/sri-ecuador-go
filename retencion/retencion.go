@@ -255,8 +255,12 @@ func Parse(doc []byte) (*ComprobanteRetencion, error) {
 //     Tabla 17 y el valor (base × tarifa).
 //   - importeTotal de cada documento: totalSinImpuestos + impuestos.
 //   - Retenciones: valorRetenido = baseImponible × porcentajeRetener / 100.
-//   - Pagos: si hay un único pago sin total, se le asigna el importe total.
+//   - Pagos: si hay un único pago y su total es cero o es el importe que
+//     tenía el documento antes de este cálculo, se le asigna el importe
+//     total; un pago con otro total lo indicó la aplicación y no se toca.
 //   - periodoFiscal: si está vacío, el mes de la fecha de emisión.
+//
+// Calcular puede llamarse de nuevo después de corregir bases o porcentajes.
 func (c *ComprobanteRetencion) Calcular() {
 	for i := range c.DocsSustento {
 		d := &c.DocsSustento[i]
@@ -276,13 +280,14 @@ func (c *ComprobanteRetencion) Calcular() {
 			total = total.Sumar(imp.ValorImpuesto)
 		}
 		d.TotalSinImpuestos = d.TotalSinImpuestos.Redondear(2)
+		importeAnterior := d.ImporteTotal
 		d.ImporteTotal = total.Redondear(2)
 		for j := range d.Retenciones {
 			r := &d.Retenciones[j]
 			r.BaseImponible = r.BaseImponible.Redondear(2)
 			r.ValorRetenido = r.BaseImponible.Porcentaje(r.PorcentajeRetener).Redondear(2)
 		}
-		if len(d.Pagos) == 1 && d.Pagos[0].Total.EsCero() {
+		if len(d.Pagos) == 1 && (d.Pagos[0].Total.EsCero() || d.Pagos[0].Total.Igual(importeAnterior)) {
 			d.Pagos[0].Total = d.ImporteTotal
 		}
 	}

@@ -40,7 +40,7 @@ Todos comparten la misma forma de uso: llenar la estructura, `Calcular()`, `Gene
 |---|---|---|---|---|---|
 | Clave de acceso: generar, analizar, validar | `clave` | ✅ | Sección 5.2, Tabla 1 | Claves impresas en la ficha; vectores; todas las claves de las pruebas aceptadas por el SRI | — |
 | Decimales exactos y redondeo | `decimal` | ✅ | Evita el código 52 | Vectores de cálculo; facturas autorizadas con 6 decimales | — |
-| Cálculo de totales | cada comprobante | ✅ | Anexos | Vectores; sin código 52 en las pruebas | Tarifas específicas de ICE: las indica el usuario |
+| Cálculo de totales | cada comprobante | ✅ | Anexos | Vectores; sin código 52 en las pruebas | ICE específico o con base propia e IRBPNR: los indica y los actualiza el usuario; ICE solo con pruebas locales |
 | Reglas de validación (forma, aritmética, catálogos, clave) | cada comprobante | ✅ | Ficha y XSD | Una prueba por regla; tabla en [`referencia/calculo-y-validacion.md`](referencia/calculo-y-validacion.md) | Las de catálogos que caducan son advertencias |
 | Base del IVA por línea (`iva.base`) | cada comprobante | ✅ | Tabla 18, art. 58 LRTI | El SRI rechaza con el código 52 la misma incoherencia; pruebas de regresión | — |
 | Redondeo del IVA de cada línea (`iva.valor`) y criterios del total | cada comprobante | ✅ | Sección 11 (código 52) | El SRI autoriza la suma por líneas y el desempate mitad al par, como el SDK | **Más estricto que el SRI a propósito** (D17): rechaza un centavo de diferencia por línea que el SRI autoriza |

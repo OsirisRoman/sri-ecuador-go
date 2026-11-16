@@ -296,6 +296,16 @@ func (a *Autorizacion) NoAutorizado() bool {
 	return false
 }
 
+// EnProceso informa si el estado indica que el SRI aún procesa el
+// comprobante (EN PROCESO, EN PROCESAMIENTO o la sigla PPR).
+func (a *Autorizacion) EnProceso() bool {
+	switch strings.ToUpper(strings.TrimSpace(a.Estado)) {
+	case EstadoEnProceso, "EN PROCESAMIENTO", "PPR":
+		return true
+	}
+	return false
+}
+
 // Fecha analiza FechaAutorizacion. El SRI ha usado más de un formato a lo
 // largo del tiempo; se aceptan RFC 3339 y dd/mm/aaaa hh:mm:ss.
 func (a *Autorizacion) Fecha() (time.Time, error) {
@@ -326,8 +336,11 @@ func (r *RespuestaAutorizacion) Autorizada() *Autorizacion {
 	return nil
 }
 
-// Ultima devuelve la autorización más reciente de la respuesta (la última
-// de la lista), o nil si el SRI aún no tiene resultado.
+// Ultima devuelve la última autorización de la lista, o nil si el SRI aún
+// no tiene resultado. No es necesariamente la más reciente: el orden en que
+// el SRI devuelve varias autorizaciones de una misma clave no está
+// documentado; compare Autorizacion.Fecha o el comprobante que contiene
+// cada una.
 func (r *RespuestaAutorizacion) Ultima() *Autorizacion {
 	if len(r.Autorizaciones) == 0 {
 		return nil
@@ -336,17 +349,18 @@ func (r *RespuestaAutorizacion) Ultima() *Autorizacion {
 }
 
 // EnProceso informa si el SRI todavía no ha resuelto el comprobante: no hay
-// autorizaciones o la última sigue en procesamiento.
+// autorizaciones, o ninguna está autorizada y alguna sigue en
+// procesamiento.
 func (r *RespuestaAutorizacion) EnProceso() bool {
 	if r.Autorizada() != nil {
 		return false
 	}
-	u := r.Ultima()
-	if u == nil {
-		return true
+	for i := range r.Autorizaciones {
+		if r.Autorizaciones[i].EnProceso() {
+			return true
+		}
 	}
-	e := strings.ToUpper(strings.TrimSpace(u.Estado))
-	return e == EstadoEnProceso || e == "EN PROCESAMIENTO" || e == "PPR"
+	return len(r.Autorizaciones) == 0
 }
 
 // EstadoComprobante es la respuesta del servicio de consulta de validez

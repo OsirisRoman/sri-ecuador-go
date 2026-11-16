@@ -2,6 +2,8 @@ package liquidacion_test
 
 import (
 	"testing"
+
+	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
 )
 
 // AUD-001 y AUD-003: la liquidación comparte las reglas de los detalles de
@@ -17,5 +19,16 @@ func TestBaseYValorDelIVAPorLinea(t *testing.T) {
 	l.Detalles[1].Impuestos[0].Valor = d("3.01") // correcto: 3,00
 	if hs := validar(l); !hs.Tiene("iva.valor") {
 		t.Errorf("falta iva.valor: %v", hs)
+	}
+}
+
+// Segunda auditoría, N-09: el XSD de la liquidación solo admite IVA en los
+// detalles; Validar lo dice antes de llegar al esquema.
+func TestSoloAdmiteIVA(t *testing.T) {
+	l := base(t, hoy)
+	l.Detalles[1].Impuestos = append(l.Detalles[1].Impuestos, comprobante.Impuesto{Codigo: comprobante.ImpuestoICE, CodigoPorcentaje: "3031", Tarifa: d("10")})
+	l.Calcular()
+	if hs := validar(l); !hs.Tiene("liquidacion.impuesto") {
+		t.Errorf("falta liquidacion.impuesto: %v", hs)
 	}
 }

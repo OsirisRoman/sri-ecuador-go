@@ -79,7 +79,7 @@ Un comprobante **solo existe tributariamente cuando está AUTORIZADO**. `RECIBID
 
 | `res.Estado` | Qué pasó | Qué hacer |
 |---|---|---|
-| `sri.EstadoAutorizado` | El SRI lo autorizó, y el documento que devolvió es el enviado (`res.Verificado`) | Guardar `res.XMLAutorizado()` (es el documento válido), generar el RIDE, entregar al receptor |
+| `sri.EstadoAutorizado` | El SRI lo autorizó, y el documento que devolvió es el enviado: con `Reanudar`, `Emitir` y `ConsultarDocumento`, `res.Verificado` es siempre `true` en este estado | Guardar `res.XMLAutorizado()` (es el documento válido), generar el RIDE, entregar al receptor |
 | `sri.EstadoRecibido` | Aceptado para procesar, sin resultado todavía (`res.Pendiente()`) | Guardar como pendiente y consultar después con `cliente.ConsultarDocumento(ctx, xmlFirmado)` (la recepción ya está confirmada). No reemitir |
 | `sri.EstadoDevuelto` | La recepción lo rechazó (estructura, clave, emisor…) | Leer `res.Mensajes`, corregir y reenviar con la **misma** clave y el mismo secuencial (ficha 5.10) |
 | `sri.EstadoNoAutorizado` | Se recibió pero no se autorizó (firma, diferencias de cálculo…) | Leer `res.Mensajes`, corregir y reenviar con la **misma** clave y el mismo secuencial (ficha 5.10 y 5.12) |
@@ -88,6 +88,10 @@ Un comprobante **solo existe tributariamente cuando está AUTORIZADO**. `RECIBID
 
 Un estado de autorización vacío o que el SDK no conoce no se convierte en `NO AUTORIZADO`: queda `EstadoRecibido` con `sri.ErrEstadoIndeterminado`, para que la aplicación no emita otro comprobante mientras el original puede seguir en curso.
 
+Lo mismo ocurre si el SRI informa `AUTORIZADO` pero no devuelve el comprobante: no se puede comprobar que el documento autorizado sea el suyo, y el resultado es `EstadoRecibido` con `sri.ErrSinComprobante` (que también es un `ErrEstadoIndeterminado`). `res.Autorizacion` lleva lo que respondió el SRI (número y fecha de autorización) para conciliarlo; no entregue el documento como autorizado y vuelva a consultar.
+
+**Varias autorizaciones para una clave.** Si el SRI devuelve más de una (el original rechazado y su corrección, por ejemplo), el resultado es el de la que contiene su documento, sea cual sea el orden en que lleguen. Todas quedan en `res.Autorizaciones`. `cliente.Autorizar(ctx, clave)` solo conoce la clave: informa el estado de la clave con `Verificado` en `false`, y no sirve para saber si el autorizado es su documento; para eso use `ConsultarDocumento`.
+
 **Corregir y reenviar.** Para corregir un comprobante devuelto o no autorizado, cambie los datos, llame a `Calcular()` **sin** volver a generar la clave (conserve `InfoTributaria.ClaveAcceso`) y vuelva a `Preparar` y `Reanudar`. Si la corrección cambia la fecha de emisión, la clave deja de corresponder (regla `clave.coherencia`). El SDK compara lo que el SRI devuelve con el XML enviado: mientras el SRI procesa la corrección, el `NO AUTORIZADO` de la versión anterior no se toma como resultado (queda `EstadoRecibido`), y si el SRI conserva otra versión **autorizada** con esa clave, el resultado es `EstadoDiscrepancia` y no un falso `AUTORIZADO`.
 
 Antes de enviar, `Preparar` puede devolver `*sri.ErrorValidacion`: el comprobante incumple una regla local y no se firmó. Sus `Hallazgos` dicen el campo, la regla y el motivo. Las `Advertencias` no impiden emitir, pero conviene registrarlas.
@@ -95,7 +99,7 @@ Antes de enviar, `Preparar` puede devolver `*sri.ErrorValidacion`: el comprobant
 ## 6. Reglas que no se deben romper
 
 1. **Nunca use `float64` para importes.** Use `decimal.Decimal` (`decimal.MustParse("12.50")`). El SRI rechaza diferencias de un centavo (error 52).
-2. **Llame a `Calcular()` después del último cambio** y antes de `GenerarClaveAcceso`. Si cambia una línea, vuelva a calcular.
+2. **Llame a `Calcular()` después del último cambio** y antes de `GenerarClaveAcceso`. Si cambia una línea, vuelva a calcular: `Calcular` deja el comprobante como si se hubiera construido desde cero con los datos nuevos (IVA, ICE deducido, totales y pago único). Lo que usted indicó expresamente (la base o el valor de un ICE específico, un IRBPNR por unidad, un pago que no es el importe total) se respeta: actualícelo usted si depende de lo que cambió, o póngalo a cero para que `Calcular` lo deduzca.
 3. **Una clave de acceso por comprobante, generada una vez y guardada.** Un reintento por fallo de red reutiliza la misma clave y el mismo XML firmado. El SDK reconoce las respuestas «clave ya registrada» (43) y «en procesamiento» (70), continúa con la consulta y comprueba que el comprobante autorizado sea el que envió.
 4. **Guarde el XML firmado antes de enviarlo** y el XML autorizado después. Sin el firmado no puede reanudar con seguridad.
 5. **El secuencial es suyo.** Resérvelo de forma atómica (transacción o secuencia de base de datos). Un comprobante `DEVUELTO` o `NO AUTORIZADO` se corrige y se reenvía con su misma clave y su mismo secuencial (ficha 5.10); uno `AUTORIZADO` no se vuelve a emitir.
@@ -125,7 +129,7 @@ El RIDE puede regenerarse en cualquier momento a partir del XML autorizado; no e
 
 **Factura.** `factura.LineaIVA(codigo, descripcion, cantidad, precio, comprobante.IVA15)` crea una línea con un impuesto IVA; para ICE o varios impuestos, llene `Detalle.Impuestos`. A consumidor final (`comprobante.IDConsumidorFinal`, identificación `9999999999999`) el límite es USD 50. La versión por defecto es la 1.1.0 (hasta 6 decimales en cantidad y precio). Exportación: `InfoFactura.ComercioExterior = factura.ComercioExteriorExportador` y los campos de incoterm; los países usan los códigos de `comprobante.Paises` (Tabla 25 del SRI, **no** ISO 3166). Reembolso: llene `Factura.Reembolsos` y `Calcular` completa los totales.
 
-**Nota de crédito.** `notacredito.DesdeFactura(f, motivo)` crea la nota que revierte por completo una factura; para una devolución parcial, recorte `Detalles`, ajuste cantidades y vuelva a `Calcular()`. Necesita su propio secuencial y clave.
+**Nota de crédito.** `notacredito.DesdeFactura(f, motivo)` crea la nota que revierte por completo una factura; para una devolución parcial, recorte `Detalles`, ajuste cantidades y vuelva a `Calcular()`, que recalcula el IVA y el ICE deducido de cada línea (un ICE específico copiado de la factura debe ajustarlo usted). Necesita su propio secuencial y clave.
 
 **Nota de débito.** Lista de `Motivos` con su valor y los impuestos sobre el total (`notadebito.ImpuestoIVA(comprobante.IVA15)`).
 

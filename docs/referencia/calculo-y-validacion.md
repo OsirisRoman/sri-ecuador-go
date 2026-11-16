@@ -15,6 +15,7 @@ Son las mismas en la liquidación de compra y, con otros nombres de campo, en la
 | `detalle.precioTotalSinImpuesto` | `redondear(cantidad × precioUnitario − descuento, 2)` |
 | Base imponible del IVA de una línea | `precioTotalSinImpuesto` más el ICE de esa misma línea, que integra la base del IVA (Tabla 18; art. 58 de la LRTI). El IRBPNR no forma parte de ella. Cada línea lleva un solo IVA |
 | Valor del IVA de una línea | `redondear(base × tarifa / 100, 2)` |
+| Base y valor del ICE o del IRBPNR de una línea | Los indica quien emite cuando no son un porcentaje del total de la línea (ICE específico o mixto, base sobre el precio de venta al público, IRBPNR por unidad). Si no se indican: base = `precioTotalSinImpuesto`; valor = `redondear(base × tarifa / 100, 2)` |
 | `totalSinImpuestos` | suma de los `precioTotalSinImpuesto` |
 | `totalDescuento` | suma de los descuentos de las líneas |
 | `totalConImpuestos` | un `totalImpuesto` por cada combinación de código de impuesto, código de porcentaje y tarifa presente en las líneas, con la suma de sus bases |
@@ -23,6 +24,17 @@ Son las mismas en la liquidación de compra y, con otros nombres de campo, en la
 **Redondeo admitido al validar.** La ficha no publica una tolerancia: el código 52 se produce «cuando existe error en los cálculos». Al validar un comprobante hecho por otro sistema, el SDK admite en cada importe calculado (IVA de una línea, valor retenido) solo el redondeo al centavo más cercano del valor exacto, es decir, una diferencia de hasta 0,005. Así acepta tanto el desempate «mitad hacia arriba» como el «mitad al par», pero no un centavo de diferencia.
 
 **Valor del IVA en los totales.** Hay dos criterios en uso: aplicar la tarifa a la base acumulada del grupo, o sumar el IVA ya redondeado de cada línea. **Decisión de este SDK:** calcular sobre la base acumulada y, al validar un comprobante hecho por otro sistema, aceptar cualquiera de los dos. Como cada línea solo admite su propio redondeo, los dos criterios difieren como mucho en medio centavo por línea (100 líneas de 0,10 al 15 % dan 1,50 sobre la base acumulada y entre 1,00 y 2,00 sumando líneas). **Comprobado:** el SRI autoriza tanto el cálculo sobre la base acumulada como la suma por líneas aunque difieran en varios centavos (0,15 y 0,20 en diez líneas de 0,10), y el desempate «mitad al par» en cada línea. **Comprobado también:** el SRI autoriza un IVA de línea con un centavo de diferencia respecto del exacto (0,16 sobre 1,00 al 15 %). **Decisión de este SDK** (D17): rechazarlo de todos modos, para que no se acumulen diferencias en el total; es una decisión de integridad tributaria, no un comportamiento desconocido. Otra implementación que quiera reproducir la aceptación del SRI debe admitir ±0,01 por línea.
+
+**Recalcular.** `Calcular` puede llamarse tantas veces como haga falta: después de cambiar una cantidad, un precio, un descuento, una tarifa o un motivo, deja el comprobante como si se hubiera construido desde cero con los datos nuevos, y sin cambios no altera nada. El IVA, los totales y el importe se deducen siempre. En el ICE y el IRBPNR, donde la aplicación puede indicar la base o el valor, cada importe sigue una de dos reglas:
+
+- **Lo que dedujo `Calcular` se vuelve a deducir.** El comprobante recuerda en memoria qué bases y valores dedujo. Esa memoria no viaja en el XML: en un comprobante leído con `Parse` se considera deducido lo que coincide exactamente con la deducción (base igual al total anterior de la línea, valor igual a base × tarifa).
+- **Lo que indicó la aplicación se respeta**, también si cambian las cantidades: un ICE específico o un IRBPNR por unidad debe actualizarlos la aplicación. Poner un importe a cero pide que `Calcular` lo deduzca.
+
+Un límite del segundo caso: en un comprobante leído de XML, si se cambia la tarifa del ICE (o una base propia), el valor anterior ya no coincide con base × tarifa y se conserva como dato de la aplicación; hay que ponerlo a cero antes de `Calcular`.
+
+Un único pago sigue al importe total mientras su total sea cero o el importe anterior; un pago con otro total, o varios pagos, no se tocan (y `pagos.suma` advierte si no cuadran).
+
+**Compensaciones.** El bloque `<compensaciones>` (descuento solidario de IVA de 2016-2017 y devolución por medios electrónicos de pago) sigue en los XSD y se resta del importe total. No está vigente ni probado contra el SRI. Como rebaja puntos porcentuales del IVA, el SDK exige que cada compensación no supere su tarifa aplicada a la base gravada con IVA y que todas juntas no superen el IVA del comprobante.
 
 **Tarifa.** Para los códigos de IVA con tarifa fija (Tabla 17), la tarifa del XML debe ser la de la tabla, en las líneas y en el `totalImpuesto`. El código 8 (IVA diferenciado) no fija la tarifa.
 
@@ -38,7 +50,7 @@ Son las mismas en la liquidación de compra y, con otros nombres de campo, en la
 
 ## Otros comprobantes
 
-- **Nota de débito:** `totalSinImpuestos` es la suma de los motivos; los impuestos se declaran sobre ese total (si los motivos tienen tarifas distintas, las bases de IVA se reparten y suman el total sin impuestos más el ICE); `valorTotal = totalSinImpuestos + impuestos`.
+- **Nota de débito:** `totalSinImpuestos` es la suma de los motivos y los impuestos se declaran sobre ese total. El ICE integra la base del IVA igual que en la factura: con un único IVA, su base es `totalSinImpuestos` más el ICE (100,00 con ICE del 10 % e IVA del 15 %: ICE 10,00, IVA 16,50 sobre 110,00, total 126,50). Si los motivos tienen tarifas de IVA distintas, quien emite reparte las bases, que suman el total sin impuestos más el ICE. `valorTotal = totalSinImpuestos + impuestos − compensaciones`. El ICE y el IRBPNR siguen las mismas reglas que en una línea de factura. **Sin comprobar** contra el SRI con ICE.
 - **Comprobante de retención:** `valorRetenido = redondear(baseImponible × porcentajeRetener / 100, 2)`. En la versión 2.0.0, `importeTotal` del documento de sustento es `totalSinImpuestos` más sus impuestos, y el período fiscal (`mm/aaaa`) suele ser el mes de emisión.
 - **Guía de remisión:** no tiene importes.
 
@@ -71,6 +83,8 @@ Este SDK aplica dos niveles antes de firmar: el **XSD oficial** (forma) y **regl
 | `iva.ausente` (advertencia) | Detalle sin IVA | Tabla 17 (el SRI autoriza un detalle solo con IRBPNR) |
 | `iva.vigencia` (advertencia) | Tarifa general del IVA que no regía en la fecha de emisión (factura y liquidación) | Ley; ver `actualizar-catalogos.md` |
 | `totales.sin-impuestos`, `totales.descuento`, `totales.impuesto`, `totales.impuesto-faltante`, `totales.impuesto-sin-detalle`, `totales.base`, `totales.tarifa`, `totales.importe` | Aritmética de los totales y tarifa del `totalImpuesto` | Código 52 |
+| `compensacion.codigo`, `compensacion.valor`, `compensacion.total`, `compensacion.historica` (advertencia) | Código distinto de 1; compensación mayor que su tarifa sobre la base gravada; compensaciones que suman más que el IVA; figura no vigente | XSD; coherencia (se restan del importe total) |
+| `liquidacion.impuesto` | ICE o IRBPNR en una liquidación de compra | XSD de liquidación (solo admite el código 2) |
 | `propina.limite` (advertencia) | Propina mayor que el 10 % del subtotal | Sección 9.16 |
 | `pagos.suma` (advertencia) | Los pagos no suman el importe total | Coherencia |
 | `exportacion.comercio-exterior` | Campos de exportación sin `comercioExterior` | Anexo 4 |

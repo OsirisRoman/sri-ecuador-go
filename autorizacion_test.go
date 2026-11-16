@@ -7,12 +7,14 @@ package sri_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/xml"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -87,18 +89,41 @@ func TestMismoComprobanteOtraSerializacion(t *testing.T) {
 	}
 }
 
+// enviado, dentro de una autorización de servidorSRI, se sustituye por el
+// <comprobante> con el último documento que recibió el servidor, como hace
+// el SRI.
+const enviado = "{{ENVIADO}}"
+
 // servidorSRI responde a recepción y autorización con los sobres dados.
 func servidorSRI(t *testing.T, recepcion, autorizacion string) *sri.Cliente {
 	t.Helper()
 	mux := http.NewServeMux()
 	e := ws.EndpointsEn("")
+	var mu sync.Mutex
+	var ultimo []byte
 	mux.HandleFunc(e.Recepcion, func(w http.ResponseWriter, r *http.Request) {
-		io.Copy(io.Discard, r.Body)
+		cuerpo, _ := io.ReadAll(r.Body)
+		var sobre struct {
+			XML string `xml:"Body>validarComprobante>xml"`
+		}
+		if err := xml.Unmarshal(cuerpo, &sobre); err != nil {
+			t.Errorf("sobre de recepción ilegible: %v", err)
+		}
+		doc, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sobre.XML))
+		if err != nil {
+			t.Errorf("comprobante mal codificado: %v", err)
+		}
+		mu.Lock()
+		ultimo = doc
+		mu.Unlock()
 		io.WriteString(w, recepcion)
 	})
 	mux.HandleFunc(e.Autorizacion, func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
-		io.WriteString(w, autorizacion)
+		mu.Lock()
+		doc := string(ultimo)
+		mu.Unlock()
+		io.WriteString(w, strings.ReplaceAll(autorizacion, enviado, "<comprobante><![CDATA["+doc+"]]></comprobante>"))
 	})
 	s := httptest.NewServer(mux)
 	t.Cleanup(s.Close)
@@ -145,7 +170,7 @@ func TestEstadosDeAutorizacion(t *testing.T) {
 		{"RECHAZADO", sri.EstadoNoAutorizado, nil},
 		{"AUT", sri.EstadoAutorizado, nil},
 	} {
-		cl := servidorSRI(t, sobreRecepcion("RECIBIDA"), sobreAutorizacion(unaAutorizacion(c.estado, "")))
+		cl := servidorSRI(t, sobreRecepcion("RECIBIDA"), sobreAutorizacion(unaAutorizacion(c.estado, enviado)))
 		res, err := cl.Emitir(context.Background(), ejemplo.Factura(comprobante.Hoy(), "000000203"))
 		if res == nil || res.Estado != c.quedar || !errors.Is(err, c.err) {
 			t.Errorf("estado %q: estado=%v err=%v; se esperaba %v y %v", c.estado, estado(res), err, c.quedar, c.err)
@@ -173,7 +198,7 @@ func TestRespuestaIncoherente(t *testing.T) {
 		}
 	}
 	// El ambiente de pruebas, con o sin tilde de por medio, es coherente.
-	cl := servidorSRI(t, sobreRecepcion("RECIBIDA"), sobreAutorizacion(unaAutorizacion("AUTORIZADO", "<ambiente>PRUEBAS</ambiente>")))
+	cl := servidorSRI(t, sobreRecepcion("RECIBIDA"), sobreAutorizacion(unaAutorizacion("AUTORIZADO", "<ambiente>PRUEBAS</ambiente>"+enviado)))
 	if res, err := cl.Emitir(context.Background(), ejemplo.Factura(comprobante.Hoy(), "000000205")); err != nil || !res.Autorizado() {
 		t.Errorf("ambiente de pruebas: %v %v", estado(res), err)
 	}
@@ -191,7 +216,7 @@ func TestRecepcionSinEstado(t *testing.T) {
 // AUD-006: los campos de la autorización se escapan.
 func TestXMLAutorizadoEscapaLosCampos(t *testing.T) {
 	cl := servidorSRI(t, sobreRecepcion("RECIBIDA"),
-		sobreAutorizacion(unaAutorizacion("AUTORIZADO", "<numeroAutorizacion>1&amp;2&lt;/x&gt;</numeroAutorizacion><fechaAutorizacion>a&lt;b</fechaAutorizacion>")))
+		sobreAutorizacion(unaAutorizacion("AUTORIZADO", "<numeroAutorizacion>1&amp;2&lt;/x&gt;</numeroAutorizacion><fechaAutorizacion>a&lt;b</fechaAutorizacion>"+enviado)))
 	res, err := cl.Emitir(context.Background(), ejemplo.Factura(comprobante.Hoy(), "000000207"))
 	if err != nil || !res.Autorizado() {
 		t.Fatal(estado(res), err)

@@ -120,6 +120,7 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 		}
 	}
 	impuestos := v.TotalesImpuestos("infoFactura.totalConImpuestos", info.TotalConImpuestos, f.impuestosPorLinea()...)
+	v.Compensaciones("infoFactura.compensaciones", info.Compensaciones, info.TotalConImpuestos)
 	if esperado := f.importeEsperado(impuestos); !info.ImporteTotal.Igual(esperado) {
 		v.Errorf("infoFactura.importeTotal", "totales.importe",
 			"es %s pero totalSinImpuestos + impuestos + propina y demás rubros = %s", info.ImporteTotal, esperado)
