@@ -138,8 +138,15 @@ func (r *Resultado) XMLAutorizado() []byte {
 	}
 	var sb strings.Builder
 	sb.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n<autorizacion>")
-	fmt.Fprintf(&sb, "<estado>%s</estado><numeroAutorizacion>%s</numeroAutorizacion><fechaAutorizacion>%s</fechaAutorizacion><ambiente>%s</ambiente>",
-		a.Estado, a.NumeroAutorizacion, a.FechaAutorizacion, a.Ambiente)
+	campo := func(nombre, valor string) {
+		sb.WriteString("<" + nombre + ">")
+		_ = xml.EscapeText(&sb, []byte(valor))
+		sb.WriteString("</" + nombre + ">")
+	}
+	campo("estado", a.Estado)
+	campo("numeroAutorizacion", a.NumeroAutorizacion)
+	campo("fechaAutorizacion", a.FechaAutorizacion)
+	campo("ambiente", a.Ambiente)
 	sb.WriteString("<comprobante><![CDATA[" + strings.ReplaceAll(doc, "]]>", "]]]]><![CDATA[>") + "]]></comprobante>")
 	sb.WriteString("</autorizacion>")
 	return []byte(sb.String())
