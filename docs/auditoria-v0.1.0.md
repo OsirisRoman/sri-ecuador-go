@@ -65,7 +65,12 @@ Una ronda en el ambiente de pruebas con el código de 0.2.0 confirmó con el SRI
 
 ## Comprobantes ya autorizados por el SRI
 
-Las reglas nuevas se aplicaron, en local y sin enviar nada, a los 24 comprobantes que el ambiente de pruebas del SRI autorizó a este proyecto (los seis tipos, en todas sus versiones): **ningún error ni advertencia nuevos** (con `SustentoEstricto` en la retención), la firma verifica, el RIDE se genera y, en los 20 de los que se conserva el XML enviado, la huella del enviado coincide con la del comprobante que devolvió el SRI. Es decir, las reglas nuevas no rechazan nada que el SRI haya autorizado, y la comparación de `Reanudar` funciona con respuestas reales. Lo que no prueba es que el SRI rechace lo que ahora rechaza el SDK.
+Las reglas nuevas se aplicaron, en local y sin enviar nada, a todos los comprobantes que el ambiente de pruebas del SRI autorizó a este proyecto (los seis tipos, en todas sus versiones; 48 respuestas de autorización contando las de la ronda de certificación de 0.2.0), con `SustentoEstricto` en la retención. En todos la firma verifica, el RIDE se genera y, cuando se conserva el XML enviado, su huella coincide con la del comprobante que devolvió el SRI. En cuanto a las reglas:
+
+- Los 24 comprobantes autorizados **antes** de la ronda no dan ningún error ni advertencia nuevos.
+- De los de la ronda, el único con un error es el **T5**: un IVA de línea con un centavo de más que se envió a propósito para contrastar `iva.valor`, que el SRI autorizó y el SDK rechaza por decisión (D17). El T2, un detalle sin IVA, da la advertencia `iva.ausente`, como se esperaba.
+
+Es decir, salvo esa diferencia deliberada, las reglas nuevas no rechazan nada que el SRI haya autorizado, y la comparación de `Reanudar` funciona con respuestas reales.
 
 ## Sigue abierto
 
