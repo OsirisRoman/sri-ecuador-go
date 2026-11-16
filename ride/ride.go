@@ -144,6 +144,12 @@ type logotipo struct {
 // logotipo que hay que recomprimir: de sobra para los 8 cm que ocupa.
 const maxLadoLogo = 900
 
+// maxPixelesLogo limita las dimensiones que declara la cabecera de la
+// imagen antes de decodificarla: image.Decode reserva ancho × alto × 4
+// bytes, y un PNG de pocos bytes puede declarar 50 000 × 50 000 píxeles
+// (10 GB). 25 megapíxeles sobran para cualquier logotipo.
+const maxPixelesLogo = 25_000_000
+
 func leerLogo(datos []byte) (*logotipo, error) {
 	if len(datos) == 0 {
 		return nil, nil
@@ -151,6 +157,9 @@ func leerLogo(datos []byte) (*logotipo, error) {
 	cfg, formato, err := image.DecodeConfig(bytes.NewReader(datos))
 	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
 		return nil, fmt.Errorf("%w: %v", ErrLogo, err)
+	}
+	if int64(cfg.Width)*int64(cfg.Height) > maxPixelesLogo {
+		return nil, fmt.Errorf("%w: %d × %d píxeles; el máximo es %d megapíxeles", ErrLogo, cfg.Width, cfg.Height, maxPixelesLogo/1_000_000)
 	}
 	img, _, err := image.Decode(bytes.NewReader(datos))
 	if err != nil {
