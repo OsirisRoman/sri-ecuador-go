@@ -279,9 +279,21 @@ type Autorizacion struct {
 	Mensajes    []Mensaje `xml:"mensajes>mensaje"`
 }
 
-// Autorizado informa si el estado es AUTORIZADO.
+// Autorizado informa si el estado es AUTORIZADO (o su sigla AUT, Tabla 6).
 func (a *Autorizacion) Autorizado() bool {
-	return strings.EqualFold(strings.TrimSpace(a.Estado), EstadoAutorizado)
+	e := strings.TrimSpace(a.Estado)
+	return strings.EqualFold(e, EstadoAutorizado) || strings.EqualFold(e, "AUT")
+}
+
+// NoAutorizado informa si el estado es un rechazo definitivo: NO AUTORIZADO,
+// su sigla NAT (Tabla 6) o RECHAZADO (ejemplo de la sección 7.2.3). Un estado
+// vacío o desconocido no es un rechazo.
+func (a *Autorizacion) NoAutorizado() bool {
+	switch strings.ToUpper(strings.TrimSpace(a.Estado)) {
+	case EstadoNoAutorizado, "NAT", EstadoRechazado:
+		return true
+	}
+	return false
 }
 
 // Fecha analiza FechaAutorizacion. El SRI ha usado más de un formato a lo
