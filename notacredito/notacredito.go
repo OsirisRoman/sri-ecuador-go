@@ -319,9 +319,7 @@ func (n *NotaCredito) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 		if len(d.Impuestos) == 0 {
 			v.Errorf(q+"impuestos", "requerido", "cada detalle debe declarar al menos un impuesto")
 		}
-		for j, imp := range d.Impuestos {
-			v.ImpuestoLinea(fmt.Sprintf("%simpuestos[%d].", q, j), imp)
-		}
+		v.ImpuestosDetalle(q, d.PrecioTotalSinImpuesto, d.Impuestos)
 		suma = suma.Sumar(d.PrecioTotalSinImpuesto)
 	}
 

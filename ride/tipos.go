@@ -24,7 +24,7 @@ func detAdicionales(das []comprobante.DetAdicional) string {
 // nombreTarifa describe un código de IVA de la Tabla 17: "15%", "0%",
 // "No objeto de impuesto"…
 func nombreTarifa(codigo string, tarifa *decimal.Decimal) string {
-	if t, ok := comprobante.TarifasIVA[codigo]; ok && t.Fija {
+	if t, ok := comprobante.TarifaIVADe(codigo); ok && t.Fija {
 		return strings.ToUpper(t.Descripcion)
 	}
 	if tarifa != nil {
