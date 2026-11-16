@@ -3,6 +3,7 @@ package decimal
 import (
 	"encoding/xml"
 	"errors"
+	"math/rand/v2"
 	"testing"
 )
 
@@ -110,5 +111,59 @@ func TestXML(t *testing.T) {
 	}
 	if err := xml.Unmarshal([]byte(`<d a="1"><v>x</v></d>`), &out); err == nil {
 		t.Error("esperaba error con decimal inválido")
+	}
+}
+
+func TestCociente(t *testing.T) {
+	for _, c := range []struct {
+		a, b   string
+		n      int
+		quiere string
+	}{
+		{"12.00", "1.15", 2, "10.43"}, // 10,4347…
+		{"35.00", "1.15", 2, "30.43"}, // 30,4347…
+		{"0.50", "1.15", 2, "0.43"},   // 0,4347…
+		{"1.15", "1.15", 2, "1.00"},
+		{"10", "3", 6, "3.333333"},
+		{"20", "3", 6, "6.666667"},
+		{"1", "8", 2, "0.13"},   // 0,125: mitad hacia arriba
+		{"-1", "8", 2, "-0.13"}, // en magnitud
+		{"1", "-8", 2, "-0.13"},
+		{"-1", "-8", 2, "0.13"},
+		{"0", "7", 2, "0.00"},
+		{"31.30", "3", 6, "10.433333"},
+		{"123456789012.34", "0.000001", 0, "123456789012340000"},
+		{"1", "3", 0, "0"},
+		{"2", "3", 0, "1"},
+	} {
+		r, err := MustParse(c.a).Cociente(MustParse(c.b), c.n)
+		if err != nil || r.String() != c.quiere {
+			t.Errorf("%s / %s con %d decimales = %s (%v); se esperaba %s", c.a, c.b, c.n, r, err, c.quiere)
+		}
+	}
+	if _, err := MustParse("1").Cociente(Cero, 2); !errors.Is(err, ErrDivisionPorCero) {
+		t.Errorf("división por cero: %v", err)
+	}
+}
+
+// Cociente es el decimal de n cifras más cercano al cociente verdadero:
+// |q × o − d| ≤ |o| × 10^(−n) / 2.
+func TestCocienteEsElMasCercano(t *testing.T) {
+	r := rand.New(rand.NewPCG(5, 2026))
+	for i := 0; i < 20000; i++ {
+		a := Nuevo(int64(r.IntN(2_000_000_000))-1_000_000_000, r.IntN(7))
+		b := Nuevo(int64(r.IntN(2_000_000))-1_000_000, r.IntN(7))
+		if b.EsCero() {
+			continue
+		}
+		n := r.IntN(7)
+		q, err := a.Cociente(b, n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cota := b.Abs().Multiplicar(Nuevo(5, n+1))
+		if dif := q.Multiplicar(b).Restar(a).Abs(); dif.Cmp(cota) > 0 {
+			t.Fatalf("%s / %s = %s: |q×b − a| = %s > %s", a, b, q, dif, cota)
+		}
 	}
 }

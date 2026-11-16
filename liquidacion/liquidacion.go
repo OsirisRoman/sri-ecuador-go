@@ -49,6 +49,12 @@ func LineaIVA(codigo, descripcion string, cantidad, precioUnitario decimal.Decim
 	return factura.LineaIVA(codigo, descripcion, cantidad, precioUnitario, codigoIVA)
 }
 
+// LineaPrecioFinal construye un detalle definido por su precio final por
+// unidad, con el IVA incluido; ver factura.LineaPrecioFinal.
+func LineaPrecioFinal(codigo, descripcion string, cantidad, precioFinal decimal.Decimal, codigoIVA string) Detalle {
+	return factura.LineaPrecioFinal(codigo, descripcion, cantidad, precioFinal, codigoIVA)
+}
+
 // LiquidacionCompra es el comprobante <liquidacionCompra>.
 type LiquidacionCompra struct {
 	XMLName xml.Name `xml:"liquidacionCompra"`
@@ -129,6 +135,19 @@ func (l *LiquidacionCompra) impuestosPorLinea() [][]comprobante.Impuesto {
 	return out
 }
 
+// decimalesDePrecio devuelve los decimales que admiten la cantidad y el
+// precio unitario en la versión del esquema.
+func (l *LiquidacionCompra) decimalesDePrecio() int {
+	if l.version() == V100 {
+		return 2
+	}
+	return 6
+}
+
+// DeclararPreciosFinales declara que la liquidación se emitió con precios
+// finales (IVA incluido); ver factura.Factura.DeclararPreciosFinales.
+func (l *LiquidacionCompra) DeclararPreciosFinales() { factura.DeclararPreciosFinales(l.Detalles) }
+
 // Calcular completa los importes derivados de los detalles (total de cada
 // línea, impuestos, totalSinImpuestos, totalDescuento, totalConImpuestos e
 // importeTotal), los totales de reembolso si hay reembolsos y el total del
@@ -138,13 +157,11 @@ func (l *LiquidacionCompra) Calcular() {
 	totalSin, totalDesc := decimal.Cero, decimal.Cero
 	for i := range l.Detalles {
 		d := &l.Detalles[i]
-		d.Descuento = d.Descuento.Redondear(2)
-		anterior := d.PrecioTotalSinImpuesto
-		d.PrecioTotalSinImpuesto = comprobante.TotalLinea(d.Cantidad, d.PrecioUnitario, d.Descuento)
+		factura.CalcularDetalle(d, l.decimalesDePrecio())
 		totalSin = totalSin.Sumar(d.PrecioTotalSinImpuesto)
 		totalDesc = totalDesc.Sumar(d.Descuento)
-		comprobante.RecalcularImpuestos(anterior, d.PrecioTotalSinImpuesto, d.Impuestos)
 	}
+	finales := factura.ImpuestosFinales(l.Detalles)
 	info := &l.InfoLiquidacionCompra
 	info.TotalSinImpuestos = totalSin.Redondear(2)
 	info.TotalDescuento = totalDesc.Redondear(2)
@@ -160,7 +177,7 @@ func (l *LiquidacionCompra) Calcular() {
 		tarifa := g.Tarifa.Redondear(2)
 		t := comprobante.TotalImpuesto{
 			Codigo: g.Codigo, CodigoPorcentaje: g.CodigoPorcentaje,
-			BaseImponible: g.Base.Redondear(2), Tarifa: &tarifa, Valor: g.Valor(),
+			BaseImponible: g.Base.Redondear(2), Tarifa: &tarifa, Valor: g.ValorCon(finales),
 		}
 		if p, ok := previos[par{g.Codigo, g.CodigoPorcentaje}]; ok {
 			t.DescuentoAdicional = p.DescuentoAdicional
@@ -261,6 +278,7 @@ func (l *LiquidacionCompra) ValidarCon(op OpcionesValidacion) comprobante.Hallaz
 		}
 	}
 	impuestos := v.TotalesImpuestos(p+"totalConImpuestos", info.TotalConImpuestos, l.impuestosPorLinea()...)
+	v.TotalesPrecioFinal(p+"totalConImpuestos", info.TotalConImpuestos, factura.ImpuestosFinales(l.Detalles), l.impuestosPorLinea()...)
 	if esperado := info.TotalSinImpuestos.Sumar(impuestos).Redondear(2); !info.ImporteTotal.Igual(esperado) {
 		v.Errorf(p+"importeTotal", "totales.importe", "es %s pero totalSinImpuestos + impuestos = %s", info.ImporteTotal, esperado)
 	}

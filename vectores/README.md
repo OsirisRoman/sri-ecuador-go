@@ -10,6 +10,7 @@ Los genera y los comprueba [`internal/vectores`](../internal/vectores/vectores_t
 |---|---|
 | `clave-acceso.json` | La composición de la clave de acceso y el dígito verificador módulo 11. Cada caso trae los componentes, los 48 dígitos base, el dígito y la clave. Incluye la clave del Anexo 14 de la ficha y los dos casos límite (dígitos 0 y 1) |
 | `calculo-factura.json` | El cálculo de totales: por cada caso, las entradas de cada línea y todos los importes esperados |
+| `precio-final.json` | El cálculo de un detalle definido por su precio final con IVA incluido: por cada línea, las entradas (cantidad, precio final, descuento, código de IVA) y lo que se deduce (importe, base, IVA, precio unitario), junto con el IVA que daría la misma base con la fórmula por defecto |
 | `firma/factura.xml` | Un comprobante sin firmar, que cumple el XSD, con caracteres especiales (`ñ & " < > '`) |
 | `firma/factura.firmada.sha256.xml` | El mismo comprobante firmado con XAdES-BES y RSA-SHA256 |
 | `firma/factura.firmada.sha1.xml` | El mismo comprobante firmado con RSA-SHA1 |

@@ -81,11 +81,17 @@ type InfoNotaCredito struct {
 // Detalle es una línea <detalle> de la nota de crédito. A diferencia de la
 // factura, los códigos se llaman codigoInterno y codigoAdicional.
 type Detalle struct {
-	CodigoInterno          string                                      `xml:"codigoInterno,omitempty"`
-	CodigoAdicional        string                                      `xml:"codigoAdicional,omitempty"`
-	Descripcion            string                                      `xml:"descripcion"`
-	Cantidad               decimal.Decimal                             `xml:"cantidad"`
-	PrecioUnitario         decimal.Decimal                             `xml:"precioUnitario"`
+	CodigoInterno   string          `xml:"codigoInterno,omitempty"`
+	CodigoAdicional string          `xml:"codigoAdicional,omitempty"`
+	Descripcion     string          `xml:"descripcion"`
+	Cantidad        decimal.Decimal `xml:"cantidad"`
+	// PrecioUnitario es el precio por unidad sin impuestos. Si se indica
+	// PrecioFinal, lo deduce Calcular.
+	PrecioUnitario decimal.Decimal `xml:"precioUnitario"`
+	// PrecioFinal, si no es cero, declara que el detalle se pactó por su
+	// precio final por unidad, con el IVA incluido; ver
+	// factura.Detalle.PrecioFinal. No forma parte del XML.
+	PrecioFinal            decimal.Decimal                             `xml:"-"`
 	Descuento              decimal.Decimal                             `xml:"descuento"`
 	PrecioTotalSinImpuesto decimal.Decimal                             `xml:"precioTotalSinImpuesto"`
 	DetallesAdicionales    comprobante.Lista[comprobante.DetAdicional] `xml:"detallesAdicionales,omitempty"`
@@ -141,6 +147,13 @@ func LineaIVA(codigo, descripcion string, cantidad, precioUnitario decimal.Decim
 // cada línea se recalculan; un ICE específico o con base propia, y un
 // IRBPNR, se copian de la factura tal cual y debe ajustarlos la aplicación.
 //
+// Los detalles que la factura define por su precio final (PrecioFinal) se
+// copian con él, y la nota de crédito suma lo mismo que la factura. Una
+// factura leída de XML no lo conserva: si se emitió con precios finales,
+// llame antes a f.DeclararPreciosFinales(), o la nota de crédito se
+// calculará con precios sin impuestos y podrá diferir en un centavo por
+// línea (Validar lo advierte con origen.precio-final).
+//
 // La nota de crédito queda asociada a f (ver AsociarFactura): Validar
 // comprueba que no devuelva más de lo facturado. Si sobre la misma factura
 // ya se emitieron otras notas de crédito, páselas con AsociarFactura.
@@ -170,6 +183,7 @@ func DesdeFactura(f *factura.Factura, motivo string) *NotaCredito {
 		n.Detalles = append(n.Detalles, Detalle{
 			CodigoInterno: d.CodigoPrincipal, CodigoAdicional: d.CodigoAuxiliar, Descripcion: d.Descripcion,
 			Cantidad: d.Cantidad, PrecioUnitario: d.PrecioUnitario, Descuento: d.Descuento,
+			PrecioFinal: d.PrecioFinal,
 			// El total de la línea de la factura permite reconocer, al
 			// calcular, el ICE que se dedujo de él (ver
 			// comprobante.RecalcularImpuestos) aunque la factura se haya
@@ -182,6 +196,46 @@ func DesdeFactura(f *factura.Factura, motivo string) *NotaCredito {
 	n.Calcular()
 	n.AsociarFactura(f)
 	return n
+}
+
+// LineaPrecioFinal construye un detalle definido por su precio final por
+// unidad, con el IVA incluido; ver factura.LineaPrecioFinal.
+func LineaPrecioFinal(codigo, descripcion string, cantidad, precioFinal decimal.Decimal, codigoIVA string) Detalle {
+	d := LineaIVA(codigo, descripcion, cantidad, decimal.Cero, codigoIVA)
+	d.PrecioFinal = precioFinal
+	return d
+}
+
+// decimalesDePrecio devuelve los decimales que admiten la cantidad y el
+// precio unitario en la versión del esquema.
+func (n *NotaCredito) decimalesDePrecio() int {
+	if n.version() == V100 {
+		return 2
+	}
+	return 6
+}
+
+// impuestosFinales devuelve los impuestos de los detalles definidos por su
+// precio final.
+func (n *NotaCredito) impuestosFinales() [][]comprobante.Impuesto {
+	var out [][]comprobante.Impuesto
+	for _, d := range n.Detalles {
+		if !d.PrecioFinal.EsCero() && comprobante.AdmitePrecioFinal(d.Impuestos) {
+			out = append(out, d.Impuestos)
+		}
+	}
+	return out
+}
+
+// DeclararPreciosFinales declara que la nota de crédito se emitió con
+// precios finales (IVA incluido), y toma como precio final de cada detalle
+// el que figura en él; ver factura.Factura.DeclararPreciosFinales.
+func (n *NotaCredito) DeclararPreciosFinales() {
+	for i := range n.Detalles {
+		if pf, ok := comprobante.PrecioFinalDeclarado(n.Detalles[i].Cantidad, n.Detalles[i].Impuestos); ok {
+			n.Detalles[i].PrecioFinal = pf
+		}
+	}
 }
 
 func (n *NotaCredito) impuestosPorLinea() [][]comprobante.Impuesto {
@@ -202,17 +256,22 @@ func (n *NotaCredito) Calcular() {
 	for i := range n.Detalles {
 		d := &n.Detalles[i]
 		d.Descuento = d.Descuento.Redondear(2)
-		anterior := d.PrecioTotalSinImpuesto
-		d.PrecioTotalSinImpuesto = comprobante.TotalLinea(d.Cantidad, d.PrecioUnitario, d.Descuento)
-		comprobante.RecalcularImpuestos(anterior, d.PrecioTotalSinImpuesto, d.Impuestos)
+		if pu, t, ok := comprobante.CalcularPrecioFinal(d.Cantidad, d.PrecioFinal, d.Descuento, n.decimalesDePrecio(), d.Impuestos); ok {
+			d.PrecioUnitario, d.PrecioTotalSinImpuesto = pu, t
+		} else {
+			anterior := d.PrecioTotalSinImpuesto
+			d.PrecioTotalSinImpuesto = comprobante.TotalLinea(d.Cantidad, d.PrecioUnitario, d.Descuento)
+			comprobante.RecalcularImpuestos(anterior, d.PrecioTotalSinImpuesto, d.Impuestos)
+		}
 		total = total.Sumar(d.PrecioTotalSinImpuesto)
 	}
+	finales := n.impuestosFinales()
 	info := &n.InfoNotaCredito
 	info.TotalSinImpuestos = total.Redondear(2)
 	info.TotalConImpuestos = nil
 	valor := info.TotalSinImpuestos
 	for _, g := range comprobante.AgruparImpuestos(n.impuestosPorLinea()...) {
-		t := comprobante.TotalImpuesto{Codigo: g.Codigo, CodigoPorcentaje: g.CodigoPorcentaje, BaseImponible: g.Base.Redondear(2), Valor: g.Valor()}
+		t := comprobante.TotalImpuesto{Codigo: g.Codigo, CodigoPorcentaje: g.CodigoPorcentaje, BaseImponible: g.Base.Redondear(2), Valor: g.ValorCon(finales)}
 		// El XSD de la nota de crédito solo admite un total por
 		// código/porcentaje sin tarifa: los grupos de igual código se suman.
 		if k := len(info.TotalConImpuestos) - 1; k >= 0 && info.TotalConImpuestos[k].Codigo == t.Codigo && info.TotalConImpuestos[k].CodigoPorcentaje == t.CodigoPorcentaje {
@@ -337,7 +396,11 @@ func (n *NotaCredito) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 		if len(d.Impuestos) == 0 {
 			v.Errorf(q+"impuestos", "requerido", "cada detalle debe declarar al menos un impuesto")
 		}
-		v.ImpuestosDetalle(q, d.PrecioTotalSinImpuesto, d.Impuestos)
+		if d.PrecioFinal.EsCero() {
+			v.ImpuestosDetalle(q, d.PrecioTotalSinImpuesto, d.Impuestos)
+		} else {
+			v.ImpuestosDetallePrecioFinal(q, d.PrecioTotalSinImpuesto, d.Cantidad, d.PrecioFinal, d.Impuestos)
+		}
 		suma = suma.Sumar(d.PrecioTotalSinImpuesto)
 	}
 
@@ -353,6 +416,7 @@ func (n *NotaCredito) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 		}
 	}
 	impuestos := v.TotalesImpuestos(p+"totalConImpuestos", info.TotalConImpuestos, n.impuestosPorLinea()...)
+	v.TotalesPrecioFinal(p+"totalConImpuestos", info.TotalConImpuestos, n.impuestosFinales(), n.impuestosPorLinea()...)
 	v.Compensaciones(p+"compensaciones", info.Compensaciones, info.TotalConImpuestos)
 	esperado := info.TotalSinImpuestos.Sumar(impuestos)
 	for _, c := range info.Compensaciones {

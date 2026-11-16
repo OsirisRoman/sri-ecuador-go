@@ -16,7 +16,7 @@ Lo que la auditoría comprobó por medios propios y sigue siendo cierto después
 | N-04 | Media | Coste cuadrático al canonicalizar un XML hostil | **Corregido.** Analizar, canonicalizar y verificar cuesta un tiempo proporcional al tamaño. Al corregirlo aparecieron y se cerraron otros dos vectores: texto partido en muchas secciones CDATA o comentarios, y firmas con miles de referencias (`xades.MaxReferencias`, `xades.MaxCertificados`) | `internal/xmldom/coste_test.go`, `internal/xmldom/referencia_test.go` (el algoritmo anterior como oráculo, también en el fuzzing del CI), `xades/recursos_test.go` |
 | N-05 | Baja a media | Las compensaciones se restaban del importe total sin validarse | **Corregido.** Reglas `compensacion.codigo`, `compensacion.valor`, `compensacion.total` y advertencia `compensacion.historica` | `TestCompensaciones` |
 | N-06 | Baja | Un comprobante con BOM UTF-8 se rechazaba | **Corregido.** Se admite un BOM inicial | `TestBOMUTF8`, `TestParseConBOM` |
-| N-07 | Decisión | La regla estricta de IVA por línea (D17) impide representar parte de los precios con IVA incluido | **Documentado**, con la cifra medida y los ejemplos, en [D17](decisiones.md) y en [`pendientes.md`](pendientes.md) (punto 15) | — |
+| N-07 | Decisión | La regla estricta de IVA por línea (D17) impide representar parte de los precios con IVA incluido | **Corregido** sin cambiar D17: modo de precio final que la aplicación declara en cada detalle ([D18](decisiones.md)). `Calcular` descompone el importe final en base e IVA y `Validar` contrasta la línea con el precio declarado; no admite un centavo de más. El SRI autorizó dos facturas calculadas así | `factura/preciofinal_test.go` (propiedad exhaustiva sobre 50 000 importes con cada una de 7 tarifas, facturas aleatorias, AUD-003), `notacredito/` y `liquidacion/preciofinal_test.go`, `vectores/precio-final.json` |
 | N-08 | Baja | `EstadoAutorizado` no implicaba `Verificado`: un `AUTORIZADO` sin comprobante se daba por autorizado | **Corregido.** En `Reanudar`, `Emitir` y `ConsultarDocumento` es un estado indeterminado (`ErrSinComprobante`); `EstadoAutorizado` implica `Verificado` | `TestAutorizadoSinComprobante` |
 | N-09 | Baja | Observaciones menores | Ver la tabla siguiente | — |
 
@@ -48,11 +48,12 @@ Con la suite reproducible de la auditoría, conservada fuera del repositorio, co
 | Firma con 3000 referencias al documento entero (2 MB) | 91 s | Rechazo inmediato |
 | Compensación de 114,99 sobre un total de 115,00 | Importe 0,01; `Preparar` firma | Error `compensacion.valor` |
 | Comprobante firmado con BOM UTF-8 | Rechazado | Aceptado |
+| Precio final de 12,00 con IVA del 15 % | 11,99 o 12,01; `10,43 + 1,57` da `iva.valor` | `LineaPrecioFinal`: 10,43 + 1,57 = 12,00, autorizado por el SRI |
 | Suite adversarial de la auditoría | 9 pruebas fallan | Falla 1 (la tarifa `100.00`, documentada) |
 
 ## Lo que sigue abierto
 
-- **Precios con IVA incluido (N-07, D17).** Con el IVA del 15 %, `Validar` rechaza la descomposición de 8696 de cada 100 000 precios finales entre 0,01 y 1000,00 (8,70 %), y `Calcular` no llega exactamente a 13 044 (13,04 %): 12,00, 35,00 o 0,50, por ejemplo. Es la aritmética de la ficha (el facturador del SRI calcula igual), pero el SRI autoriza la diferencia. Ver D17.
+- **Precio final con ICE o IRBPNR.** El modo de precio final (D18) solo admite detalles cuyo único impuesto es el IVA; con otros impuestos se rechaza (`precio-final.impuestos`). Tampoco existe en la nota de débito.
 - **ICE contra el SRI.** N-01 y N-02 afectan a comprobantes con ICE, que no se han podido enviar al SRI: el emisor de las pruebas no tiene actividad gravada. La regla «el ICE integra la base del IVA» está confirmada en la factura; en la nota de débito, solo en local.
 - **Varias autorizaciones por clave.** El SRI devolvió siempre una sola en las pruebas. El resultado ya no depende del orden, de modo que no hace falta observarlo; sigue sin conocerse cuántas devuelve.
 - **Límites del recálculo.** En un comprobante leído de XML, cambiar la tarifa de un ICE (o una base propia) no actualiza su valor, que se toma por dato de la aplicación; hay que ponerlo a cero. Un ICE específico o un IRBPNR por unidad los actualiza siempre la aplicación.

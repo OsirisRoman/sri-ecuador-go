@@ -122,13 +122,30 @@ type InfoFactura struct {
 }
 
 // Detalle es una línea <detalle> de la factura.
+//
+// Se define de una de dos maneras: por su precio sin impuestos
+// (PrecioUnitario, el modo por defecto) o por su precio final con el IVA
+// incluido (PrecioFinal). Ver comprobante.DescomponerPrecioFinal.
 type Detalle struct {
-	CodigoPrincipal        string                                      `xml:"codigoPrincipal,omitempty"`
-	CodigoAuxiliar         string                                      `xml:"codigoAuxiliar,omitempty"`
-	Descripcion            string                                      `xml:"descripcion"`
-	UnidadMedida           string                                      `xml:"unidadMedida,omitempty"`
-	Cantidad               decimal.Decimal                             `xml:"cantidad"`
-	PrecioUnitario         decimal.Decimal                             `xml:"precioUnitario"`
+	CodigoPrincipal string          `xml:"codigoPrincipal,omitempty"`
+	CodigoAuxiliar  string          `xml:"codigoAuxiliar,omitempty"`
+	Descripcion     string          `xml:"descripcion"`
+	UnidadMedida    string          `xml:"unidadMedida,omitempty"`
+	Cantidad        decimal.Decimal `xml:"cantidad"`
+	// PrecioUnitario es el precio por unidad sin impuestos. Si se indica
+	// PrecioFinal, lo deduce Calcular.
+	PrecioUnitario decimal.Decimal `xml:"precioUnitario"`
+	// PrecioFinal, si no es cero, declara que el detalle se pactó por su
+	// precio final por unidad, con el IVA incluido. Calcular deduce de él
+	// la base, el IVA y PrecioUnitario, de modo que la línea sume
+	// exactamente cantidad × PrecioFinal, y Validar contrasta la línea con
+	// él (reglas precio-final.*) en lugar de con base × tarifa. Solo se
+	// admite en detalles cuyo único impuesto es el IVA.
+	//
+	// No forma parte del XML del SRI: un comprobante leído con Parse no lo
+	// tiene. Para validarlo o recalcularlo como precio final, vuelva a
+	// indicarlo o use DeclararPreciosFinales.
+	PrecioFinal            decimal.Decimal                             `xml:"-"`
 	PrecioSinSubsidio      *decimal.Decimal                            `xml:"precioSinSubsidio,omitempty"`
 	Descuento              decimal.Decimal                             `xml:"descuento"`
 	PrecioTotalSinImpuesto decimal.Decimal                             `xml:"precioTotalSinImpuesto"`
@@ -261,6 +278,93 @@ func LineaIVA(codigo, descripcion string, cantidad, precioUnitario decimal.Decim
 		}},
 	}
 }
+
+// LineaPrecioFinal construye un detalle definido por su precio final por
+// unidad, con el IVA incluido: lo que paga el comprador. Calcular deduce la
+// base, el IVA y el precio unitario sin impuestos, y la línea suma
+// exactamente cantidad × precioFinal (redondeado al centavo).
+//
+//	factura.LineaPrecioFinal("ARR-01", "Arriendo de noviembre", decimal.Entero(1), decimal.MustParse("350.00"), comprobante.IVA15)
+//	// base 304,35 + IVA 45,65 = 350,00
+//
+// Con LineaIVA y un precio sin impuestos de 304,35, el IVA sería 45,65 y el
+// total 350,00 también; con 12,00 de precio final la base es 10,43 y el IVA
+// 1,57, y no hay ningún precio sin impuestos de 2 decimales que dé 12,00.
+func LineaPrecioFinal(codigo, descripcion string, cantidad, precioFinal decimal.Decimal, codigoIVA string) Detalle {
+	d := LineaIVA(codigo, descripcion, cantidad, decimal.Cero, codigoIVA)
+	d.PrecioFinal = precioFinal
+	return d
+}
+
+// DecimalesDePrecio devuelve cuántos decimales admiten la cantidad y el
+// precio unitario en una versión del esquema de factura: 2 en la 1.0.0 y la
+// 2.0.0, y 6 en las demás.
+func DecimalesDePrecio(version string) int {
+	if version == V100 || version == V200 {
+		return 2
+	}
+	return 6
+}
+
+// CalcularDetalle completa los importes de un detalle: su total sin
+// impuestos y la tarifa, la base y el valor de sus impuestos. Si el detalle
+// se define por su precio final (PrecioFinal), deduce además el precio
+// unitario con decimales decimales. Lo comparten la factura y la
+// liquidación de compra.
+func CalcularDetalle(d *Detalle, decimales int) {
+	d.Descuento = d.Descuento.Redondear(2)
+	if pu, total, ok := comprobante.CalcularPrecioFinal(d.Cantidad, d.PrecioFinal, d.Descuento, decimales, d.Impuestos); ok {
+		d.PrecioUnitario, d.PrecioTotalSinImpuesto = pu, total
+		return
+	}
+	anterior := d.PrecioTotalSinImpuesto
+	d.PrecioTotalSinImpuesto = totalLinea(*d)
+	comprobante.RecalcularImpuestos(anterior, d.PrecioTotalSinImpuesto, d.Impuestos)
+}
+
+// ImpuestosFinales devuelve los impuestos de los detalles definidos por su
+// precio final.
+func ImpuestosFinales(detalles []Detalle) [][]comprobante.Impuesto {
+	var out [][]comprobante.Impuesto
+	for _, d := range detalles {
+		if !d.PrecioFinal.EsCero() && comprobante.AdmitePrecioFinal(d.Impuestos) {
+			out = append(out, d.Impuestos)
+		}
+	}
+	return out
+}
+
+// DeclararPreciosFinales declara que los detalles se pactaron por su precio
+// final con IVA incluido y toma como tal el que figura en cada uno: (base +
+// IVA) / cantidad. Sirve para un comprobante leído de XML, que no conserva
+// el modo; ver Factura.DeclararPreciosFinales.
+func DeclararPreciosFinales(detalles []Detalle) {
+	for i := range detalles {
+		if pf, ok := comprobante.PrecioFinalDeclarado(detalles[i].Cantidad, detalles[i].Impuestos); ok {
+			detalles[i].PrecioFinal = pf
+		}
+	}
+}
+
+// DeclararPreciosFinales declara que la factura se emitió con precios
+// finales (IVA incluido), y toma como precio final de cada detalle el que
+// figura en él: (base + IVA) / cantidad.
+//
+// El XML del SRI no dice cómo se calculó una línea. Una factura hecha con
+// precios finales y leída con Parse se valida, por defecto, como si sus
+// precios fueran sin impuestos, y Validar puede rechazarla con iva.valor.
+// La aplicación, que sabe cómo fija sus precios, tiene dos formas de volver
+// a dar ese contexto:
+//
+//   - Asignar a cada Detalle.PrecioFinal el precio que consta en sus propios
+//     registros: Validar comprueba entonces la factura contra ese precio.
+//   - Llamar a este método: Validar comprueba que cada línea sea la
+//     descomposición exacta de su propio importe (base = importe / (1 +
+//     tarifa), redondeado), que es lo más que se puede saber sin el precio
+//     original.
+//
+// No afecta a los detalles con ICE o IRBPNR, que no admiten el modo.
+func (f *Factura) DeclararPreciosFinales() { DeclararPreciosFinales(f.Detalles) }
 
 // EtiquetaXML implementa comprobante.Etiquetado.
 func (Detalle) EtiquetaXML() string { return "detalle" }

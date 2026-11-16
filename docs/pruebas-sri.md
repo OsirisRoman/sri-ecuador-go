@@ -60,6 +60,7 @@ Conviene conocerlos porque condicionan cómo se integra el SDK:
 - **Base del IVA de un detalle.** El SRI la recalcula: una base de 1,00 en una línea de 100,00 se rechaza con el código 52 («La base imponible del impuesto 1.0 no coincide con la calculada 100.0»). Es la regla `iva.base` del SDK.
 - **Detalle sin IVA.** Un detalle que solo lleva IRBPNR se autoriza; por eso `iva.ausente` es una advertencia.
 - **Redondeo del IVA.** El SRI autoriza el total de IVA calculado como suma de las líneas aunque difiera de la base acumulada (0,20 frente a 0,15 en diez líneas de 0,10) y el desempate «mitad al par» en cada línea. También autoriza un IVA de línea con **un centavo de diferencia** (0,16 sobre una base de 1,00 al 15 %), que el SDK rechaza (`iva.valor`) **a propósito**: es una decisión de integridad tributaria (D17), para que esas diferencias no se acumulen en el total.
+- **Precio final con IVA incluido.** El SRI autoriza una factura de una línea calculada desde su precio final (12,00: base 10,43 e IVA 1,57, donde la tarifa sobre la base daría 1,56) y otra de diez líneas de 0,50 (0,43 + 0,07 cada una; totales 4,30 + 0,70 = 5,00, donde la tarifa sobre la base acumulada daría 0,65). Es el cálculo del modo de precio final (D18).
 - **Clave desconocida y comprobante en proceso** reciben la misma respuesta de autorización (sin autorizaciones). Si el envío falló, el estado se resuelve reenviando con `Reanudar`, no consultando.
 
 ## Verificación independiente

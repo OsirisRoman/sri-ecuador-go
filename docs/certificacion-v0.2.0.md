@@ -25,6 +25,15 @@ Cada prueba se predijo en local antes de enviarla. Las que envían un comprobant
 | T4: las mismas líneas con IVA 0,01 (desempate mitad al par), total 0,15 | Aceptado | AUTORIZADO | Confirmado |
 | T5: IVA 0,16 sobre una base de 1,00 al 15 % (exacto 0,15) | Error `iva.valor` | AUTORIZADO | **El SDK es más estricto que el SRI por decisión** (D17) |
 
+## Precio final con IVA incluido
+
+Enviadas el 16 de noviembre de 2026 con el modo de precio final (decisión D18), por el flujo normal (`Preparar`).
+
+| Prueba | Esperado en el SDK | Respuesta del SRI | Conclusión |
+|---|---|---|---|
+| T8: una línea de 12,00 de precio final al 15 %: base 10,43 e IVA 1,57 (la tarifa sobre la base daría 1,56) | Aceptado con el precio declarado; `iva.valor` si se lee del XML sin declararlo | RECIBIDA, AUTORIZADO, verificado | Confirmado |
+| T9: diez líneas de 0,50 de precio final: 0,43 + 0,07 cada una; totales 4,30 + 0,70 = 5,00 (la tarifa sobre la base acumulada daría 0,65) | Aceptado; IVA total por suma de líneas | RECIBIDA, AUTORIZADO, verificado | Confirmado |
+
 ## Reenvío, estados y conservación
 
 | Prueba | Esperado | Respuesta del SRI | Conclusión |

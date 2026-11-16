@@ -157,6 +157,35 @@ func (d Decimal) Porcentaje(tasa Decimal) Decimal {
 	return r
 }
 
+// ErrDivisionPorCero indica una división por cero en Cociente.
+var ErrDivisionPorCero = errors.New("decimal: división por cero")
+
+// Cociente devuelve d / o redondeado a n decimales, mitad hacia arriba en
+// magnitud como Redondear. La división se hace con enteros exactos: el
+// resultado es el decimal de n cifras más cercano al cociente verdadero.
+func (d Decimal) Cociente(o Decimal, n int) (Decimal, error) {
+	if o.EsCero() {
+		return Decimal{}, ErrDivisionPorCero
+	}
+	if n < 0 {
+		n = 0
+	}
+	// d / o = (a × 10^eo) / (b × 10^ed); se busca ese valor × 10^n.
+	num := new(big.Int).Mul(d.c(), pot10(o.escala+n))
+	den := new(big.Int).Mul(o.c(), pot10(d.escala))
+	negativo := num.Sign()*den.Sign() < 0
+	num.Abs(num)
+	den.Abs(den)
+	q, r := new(big.Int).QuoRem(num, den, new(big.Int))
+	if r.Lsh(r, 1).Cmp(den) >= 0 {
+		q.Add(q, big.NewInt(1))
+	}
+	if negativo {
+		q.Neg(q)
+	}
+	return Decimal{coef: q, escala: n}, nil
+}
+
 // Negar devuelve −d.
 func (d Decimal) Negar() Decimal {
 	return Decimal{coef: new(big.Int).Neg(d.c()), escala: d.escala}

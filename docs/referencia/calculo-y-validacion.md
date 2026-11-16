@@ -36,6 +36,25 @@ Un único pago sigue al importe total mientras su total sea cero o el importe an
 
 **Compensaciones.** El bloque `<compensaciones>` (descuento solidario de IVA de 2016-2017 y devolución por medios electrónicos de pago) sigue en los XSD y se resta del importe total. No está vigente ni probado contra el SRI. Como rebaja puntos porcentuales del IVA, el SDK exige que cada compensación no supere su tarifa aplicada a la base gravada con IVA y que todas juntas no superen el IVA del comprobante.
 
+**Precio final con IVA incluido.** Quien pacta con su cliente un precio final (un arriendo de 350,00, un artículo de 12,00) necesita que la línea sume exactamente ese precio. Con la fórmula de arriba no siempre es posible: al 15 %, el 13 % de los importes finales no es la suma de ninguna base de 2 decimales y su IVA redondeado (12,00 queda en 11,99 o 12,01). La descomposición desde el precio final es:
+
+```
+importe         = redondear(cantidad × precioFinal, 2)
+base            = redondear(importe × 100 / (100 + tarifa), 2)
+IVA             = importe − base
+precioUnitario  = redondear((base + descuento) / cantidad, 6)
+```
+
+con `precioTotalSinImpuesto = base`, el IVA total del comprobante igual a la suma del IVA de las líneas, y el descuento (sin impuestos) como dato informativo del precio anterior. Propiedades, con *t* la tarifa en tanto por uno y *G* el importe:
+
+- `base + IVA = G`, exactamente.
+- `|IVA − G·t/(1+t)| ≤ 0,005`: el IVA es el contenido en el precio, redondeado al centavo.
+- `|IVA − base·t| ≤ 0,005·(1+t)` (0,00575 al 15 %): nunca un centavo respecto de la base escrita. A la inversa, una base y un IVA que cumplen esta cota son la descomposición de su suma. Para un importe dado, la base y el IVA son únicos.
+
+**Decisión de este SDK** (D18): es un modo que la aplicación declara en cada detalle, no una regla general; un detalle que no lo declara sigue la fórmula por defecto y la regla estricta (D17). Al validar, la línea se contrasta con el precio declarado: base + IVA debe ser cantidad × precio final, y la base, el importe entre (1 + tarifa), redondeado. Solo vale para detalles cuyo único impuesto es el IVA: con ICE o IRBPNR la base del IVA no es el total de la línea, o el precio incluye algo más que el IVA, y la fórmula es otra. **Comprobado:** el SRI autoriza una línea de 10,43 + 1,57 y diez líneas de 0,43 + 0,07 con un IVA total de 0,70. Los vectores están en [`vectores/precio-final.json`](../../vectores/precio-final.json).
+
+Como el XML no indica el modo, otra implementación que lea un comprobante de precios finales debe recibir ese dato de quien lo emitió, o comprobar la cota anterior cuando sepa que lo es.
+
 **Tarifa.** Para los códigos de IVA con tarifa fija (Tabla 17), la tarifa del XML debe ser la de la tabla, en las líneas y en el `totalImpuesto`. El código 8 (IVA diferenciado) no fija la tarifa.
 
 **Vigencia de la tarifa.** La ficha no fecha las tarifas. Según la ley, la tarifa general fue del 12 % hasta el 31 de marzo de 2024 (salvo el 14 % del 1 de junio de 2016 al 31 de mayo de 2017) y es del 15 % desde el 1 de abril de 2024. El SDK lo advierte en facturas y liquidaciones, pero no lo trata como error: una tarifa distinta puede ser legítima.
@@ -85,6 +104,8 @@ Este SDK aplica dos niveles antes de firmar: el **XSD oficial** (forma) y **regl
 | `totales.sin-impuestos`, `totales.descuento`, `totales.impuesto`, `totales.impuesto-faltante`, `totales.impuesto-sin-detalle`, `totales.base`, `totales.tarifa`, `totales.importe` | Aritmética de los totales y tarifa del `totalImpuesto` | Código 52 |
 | `compensacion.codigo`, `compensacion.valor`, `compensacion.total`, `compensacion.historica` (advertencia) | Código distinto de 1; compensación mayor que su tarifa sobre la base gravada; compensaciones que suman más que el IVA; figura no vigente | XSD; coherencia (se restan del importe total) |
 | `liquidacion.impuesto` | ICE o IRBPNR en una liquidación de compra | XSD de liquidación (solo admite el código 2) |
+| `precio-final.impuestos`, `precio-final.importe`, `precio-final.base`, `precio-final.total` | Detalle declarado por su precio final (IVA incluido): que su único impuesto sea el IVA; que base + IVA sea cantidad × precio final; que la base sea el importe entre (1 + tarifa), redondeado; que el IVA total sea la suma del IVA de las líneas. Sustituyen a `iva.valor` en ese detalle | Decisión D18; comprobado con el SRI |
+| `origen.precio-final` (advertencia) | Nota de crédito sin precios finales sobre una factura que se emitió con ellos | Coherencia |
 | `propina.limite` (advertencia) | Propina mayor que el 10 % del subtotal | Sección 9.16 |
 | `pagos.suma` (advertencia) | Los pagos no suman el importe total | Coherencia |
 | `exportacion.comercio-exterior` | Campos de exportación sin `comercioExterior` | Anexo 4 |

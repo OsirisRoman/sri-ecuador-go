@@ -46,6 +46,9 @@ func (n *NotaCredito) AsociarFactura(f *factura.Factura, anteriores ...*NotaCred
 //   - origen.impuesto y origen.base: cada impuesto de la nota de crédito
 //     debe existir en la factura, y su base acumulada no puede superar la
 //     de la factura.
+//   - origen.precio-final (advertencia): la factura tiene líneas cuyo IVA
+//     solo es coherente como precio final (IVA incluido) y la nota de
+//     crédito no declara ningún precio final.
 //   - origen.cantidad: la cantidad devuelta de cada código, acumulada, no
 //     puede superar la facturada. origen.detalle (advertencia): un detalle
 //     cuyo código no figura en la factura (descuentos o bonificaciones que
@@ -111,6 +114,22 @@ func (n *NotaCredito) validarContra(v *comprobante.Validador, f *factura.Factura
 			v.Errorf(campo, "origen.impuesto", "la factura no tiene el impuesto %s/%s", k.codigo, k.porcentaje)
 		case basesNC[k].Cmp(bf) > 0:
 			v.Errorf(campo+".baseImponible", "origen.base", "las notas de crédito suman una base de %s, más que la de la factura (%s)", basesNC[k], bf)
+		}
+	}
+
+	// Una factura emitida con precios finales (IVA incluido) cuya nota de
+	// crédito se calcula con precios sin impuestos puede diferir de ella en
+	// un centavo por línea, y ya no la revierte por completo.
+	if len(n.impuestosFinales()) == 0 {
+		for i, d := range f.Detalles {
+			if !comprobante.AdmitePrecioFinal(d.Impuestos) {
+				continue
+			}
+			imp := d.Impuestos[0]
+			if _, final := comprobante.PrecioFinalDeclarado(d.Cantidad, d.Impuestos); final && !comprobante.ImporteRedondeado(imp.Valor, imp.BaseImponible.Porcentaje(imp.Tarifa)) {
+				v.Advertirf(fmt.Sprintf("factura.detalles[%d]", i), "origen.precio-final", "la factura se emitió con precios finales (IVA incluido) y la nota de crédito no los declara: sus importes pueden diferir en un centavo por línea; llame a DeclararPreciosFinales en la factura antes de DesdeFactura, o indique PrecioFinal en los detalles")
+				break
+			}
 		}
 	}
 
