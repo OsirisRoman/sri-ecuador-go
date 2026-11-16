@@ -18,6 +18,7 @@ package retencion
 import (
 	"encoding/xml"
 	"fmt"
+	"maps"
 	"regexp"
 
 	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
@@ -50,6 +51,9 @@ var PorcentajesIVA = map[string]decimal.Decimal{
 	"7":  decimal.Entero(0),
 	"8":  decimal.Entero(0),
 }
+
+// porcentajesIVA es la copia que usa la validación; ver comprobante.TarifaIVADe.
+var porcentajesIVA = maps.Clone(PorcentajesIVA)
 
 // Tipo de pago (tabla 15 del catálogo ATS).
 const (
@@ -259,13 +263,15 @@ func (c *ComprobanteRetencion) Calcular() {
 		total := d.TotalSinImpuestos
 		for j := range d.ImpuestosDocSustento {
 			imp := &d.ImpuestosDocSustento[j]
+			// La base se redondea antes de calcular el impuesto: Validar
+			// recalcula sobre la base escrita en el XML.
+			imp.BaseImponible = imp.BaseImponible.Redondear(2)
 			if imp.CodImpuestoDocSustento == comprobante.ImpuestoIVA {
-				if t, ok := comprobante.TarifasIVA[imp.CodigoPorcentaje]; ok && t.Fija {
+				if t, ok := comprobante.TarifaIVADe(imp.CodigoPorcentaje); ok && t.Fija {
 					imp.Tarifa = t.Tarifa
 				}
 				imp.ValorImpuesto = imp.BaseImponible.Porcentaje(imp.Tarifa)
 			}
-			imp.BaseImponible = imp.BaseImponible.Redondear(2)
 			imp.ValorImpuesto = imp.ValorImpuesto.Redondear(2)
 			total = total.Sumar(imp.ValorImpuesto)
 		}
@@ -311,7 +317,6 @@ var (
 	reDosDigitos   = regexp.MustCompile(`^[0-9]{2}$`)
 	rePais         = regexp.MustCompile(`^[0-9]{3,4}$`)
 	reFormaPagoXSD = regexp.MustCompile(`^(0[1-9]|1[0-9]|2[01])$`)
-	tolerancia     = decimal.MustParse("0.01")
 )
 
 // OpcionesValidacion ajusta ValidarCon.
@@ -323,6 +328,12 @@ type OpcionesValidacion struct {
 	// porcentaje no admitido), que por defecto son advertencias porque el
 	// catálogo puede estar desactualizado. Ver ConceptoRenta.
 	CatalogoRentaEstricto bool
+	// SustentoEstricto convierte en errores las reglas que contrastan las
+	// bases de retención con los importes del documento de sustento
+	// (retencion.base-iva, retencion.base-renta, sustento.base-iva), que por
+	// defecto son advertencias: el SDK solo conoce del sustento lo que
+	// declara este mismo comprobante. Ver ValidarCon.
+	SustentoEstricto bool
 }
 
 // Validar aplica las reglas que se pueden comprobar sin consultar al SRI y
@@ -440,13 +451,13 @@ func (c *ComprobanteRetencion) ValidarCon(op OpcionesValidacion) comprobante.Hal
 			r := fmt.Sprintf("%simpuestosDocSustento[%d].", q, j)
 			switch imp.CodImpuestoDocSustento {
 			case comprobante.ImpuestoIVA:
-				if t, ok := comprobante.TarifasIVA[imp.CodigoPorcentaje]; !ok {
+				if t, ok := comprobante.TarifaIVADe(imp.CodigoPorcentaje); !ok {
 					v.Errorf(r+"codigoPorcentaje", "catalogo", "código de IVA %q desconocido (Tabla 17)", imp.CodigoPorcentaje)
 				} else if t.Fija && !imp.Tarifa.Igual(t.Tarifa) {
 					v.Errorf(r+"tarifa", "iva.tarifa", "el código %s corresponde a %s; la tarifa declarada es %s", t.Codigo, t.Descripcion, imp.Tarifa)
 				}
-				if calc := imp.BaseImponible.Porcentaje(imp.Tarifa).Redondear(2); imp.ValorImpuesto.Restar(calc).Abs().Cmp(tolerancia) > 0 {
-					v.Errorf(r+"valorImpuesto", "iva.valor", "es %s pero base × tarifa = %s", imp.ValorImpuesto, calc)
+				if exacto := imp.BaseImponible.Porcentaje(imp.Tarifa); !comprobante.ImporteRedondeado(imp.ValorImpuesto, exacto) {
+					v.Errorf(r+"valorImpuesto", "iva.valor", "es %s pero base × tarifa = %s", imp.ValorImpuesto, exacto.Redondear(2))
 				}
 			case comprobante.ImpuestoICE, comprobante.ImpuestoIRBPNR:
 			default:
@@ -464,6 +475,7 @@ func (c *ComprobanteRetencion) ValidarCon(op OpcionesValidacion) comprobante.Hal
 		if len(d.Retenciones) == 0 {
 			v.Errorf(q+"retenciones", "requerido", "debe haber al menos una retención por documento de sustento")
 		}
+		validarBasesSustento(v, q, d, op)
 		for j, ret := range d.Retenciones {
 			r := fmt.Sprintf("%sretenciones[%d].", q, j)
 			validarRetencion(v, r, ret.Codigo, ret.CodigoRetencion, ret.BaseImponible, ret.PorcentajeRetener, ret.ValorRetenido, info.FechaEmision, op)
@@ -483,7 +495,7 @@ func (c *ComprobanteRetencion) ValidarCon(op OpcionesValidacion) comprobante.Hal
 		suma := decimal.Cero
 		for j, pg := range d.Pagos {
 			r := fmt.Sprintf("%spagos[%d].", q, j)
-			switch _, enTabla := comprobante.FormasPago[pg.FormaPago]; {
+			switch _, enTabla := comprobante.FormaPagoDe(pg.FormaPago); {
 			case !reFormaPagoXSD.MatchString(pg.FormaPago):
 				v.Errorf(r+"formaPago", "catalogo", "código %q inválido (Tabla 24)", pg.FormaPago)
 			case !enTabla:
@@ -517,6 +529,56 @@ func (c *ComprobanteRetencion) ValidarCon(op OpcionesValidacion) comprobante.Hal
 	return v.Hallazgos()
 }
 
+// validarBasesSustento contrasta las bases de retención de un documento de
+// sustento con los importes que declara ese mismo documento:
+//
+//   - retencion.base-iva: la retención de IVA se calcula sobre el IVA del
+//     comprobante de venta, así que sus bases no pueden sumar más que el
+//     IVA del sustento.
+//   - retencion.base-renta: la retención de renta se calcula sobre el valor
+//     sin IVA, así que sus bases no pueden sumar más que el importe total
+//     menos el IVA.
+//   - sustento.base-iva: las bases de IVA del sustento no pueden sumar más
+//     que su total sin impuestos más el ICE (Tabla 18; art. 58 LRTI).
+//
+// Sumar las bases detecta también una misma retención declarada dos veces.
+// Son advertencias salvo con OpcionesValidacion.SustentoEstricto: el SDK no
+// ve el comprobante de venta, solo los importes que se copiaron de él.
+func validarBasesSustento(v *comprobante.Validador, q string, d DocSustento, op OpcionesValidacion) {
+	reportar := v.Advertirf
+	if op.SustentoEstricto {
+		reportar = v.Errorf
+	}
+	iva, ice, basesIVA := decimal.Cero, decimal.Cero, decimal.Cero
+	for _, imp := range d.ImpuestosDocSustento {
+		switch imp.CodImpuestoDocSustento {
+		case comprobante.ImpuestoIVA:
+			iva = iva.Sumar(imp.ValorImpuesto)
+			basesIVA = basesIVA.Sumar(imp.BaseImponible)
+		case comprobante.ImpuestoICE:
+			ice = ice.Sumar(imp.ValorImpuesto)
+		}
+	}
+	retIVA, retRenta := decimal.Cero, decimal.Cero
+	for _, r := range d.Retenciones {
+		switch r.Codigo {
+		case ImpuestoIVA:
+			retIVA = retIVA.Sumar(r.BaseImponible)
+		case ImpuestoRenta:
+			retRenta = retRenta.Sumar(r.BaseImponible)
+		}
+	}
+	if retIVA.Cmp(iva) > 0 {
+		reportar(q+"retenciones", "retencion.base-iva", "las bases de las retenciones de IVA suman %s, más que el IVA del documento de sustento (%s)", retIVA, iva.Redondear(2))
+	}
+	if limite := d.ImporteTotal.Restar(iva); retRenta.Cmp(limite) > 0 {
+		reportar(q+"retenciones", "retencion.base-renta", "las bases de las retenciones de renta suman %s, más que el valor sin IVA del documento de sustento (%s)", retRenta, limite.Redondear(2))
+	}
+	if limite := d.TotalSinImpuestos.Sumar(ice); basesIVA.Cmp(limite) > 0 {
+		reportar(q+"impuestosDocSustento", "sustento.base-iva", "las bases de IVA suman %s, más que el total sin impuestos más el ICE (%s)", basesIVA, limite.Redondear(2))
+	}
+}
+
 // validarRetencion aplica las reglas de una línea de retención, comunes a
 // las versiones 1.0.0 y 2.0.0: tipo de impuesto (Tabla 19), código y
 // porcentaje (Tabla 20 para el IVA; Catálogo ATS para la renta) y valor
@@ -543,7 +605,7 @@ func validarRetencion(v *comprobante.Validador, r, codigo, codigoRetencion strin
 		}
 	}
 	if codigo == ImpuestoIVA {
-		if pct, ok := PorcentajesIVA[codigoRetencion]; !ok {
+		if pct, ok := porcentajesIVA[codigoRetencion]; !ok {
 			v.Errorf(r+"codigoRetencion", "catalogo", "código de retención de IVA %q desconocido (Tabla 20)", codigoRetencion)
 		} else if !porcentaje.Igual(pct) {
 			v.Errorf(r+"porcentajeRetener", "retencion.porcentaje", "el código %s de retención de IVA corresponde al %s %%; se declaró %s", codigoRetencion, pct, porcentaje)
@@ -552,7 +614,7 @@ func validarRetencion(v *comprobante.Validador, r, codigo, codigoRetencion strin
 	v.Numero(r+"baseImponible", base, 14, 2)
 	v.Numero(r+"porcentajeRetener", porcentaje, 3, 2)
 	v.Numero(r+"valorRetenido", valor, 14, 2)
-	if calc := base.Porcentaje(porcentaje).Redondear(2); valor.Restar(calc).Abs().Cmp(tolerancia) > 0 {
-		v.Errorf(r+"valorRetenido", "retencion.valor", "es %s pero base × porcentaje = %s", valor, calc)
+	if exacto := base.Porcentaje(porcentaje); !comprobante.ImporteRedondeado(valor, exacto) {
+		v.Errorf(r+"valorRetenido", "retencion.valor", "es %s pero base × porcentaje = %s", valor, exacto.Redondear(2))
 	}
 }

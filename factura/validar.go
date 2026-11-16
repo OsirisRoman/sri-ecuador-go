@@ -98,11 +98,18 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 		v.Errorf("detalles", "requerido", "la factura debe tener al menos un detalle")
 	}
 	sumaLineas, sumaDesc := ValidarDetalles(v, f.Detalles, decimalesCantidad)
+	VigenciaDetalles(v, f.Detalles, info.FechaEmision)
 
 	// --- Totales -------------------------------------------------------------
 	v.Numero("infoFactura.totalSinImpuestos", info.TotalSinImpuestos, 14, 2)
 	v.Numero("infoFactura.totalDescuento", info.TotalDescuento, 14, 2)
 	v.Numero("infoFactura.propina", info.Propina, 14, 2)
+	if limite := info.TotalSinImpuestos.Porcentaje(decimal.Entero(10)); info.Propina.Cmp(limite) > 0 {
+		// El facturador del SRI no admite una propina mayor que el 10 % del
+		// subtotal (sección 9.16, campo 9). No es una regla del esquema ni de
+		// la tabla de errores, por eso es una advertencia.
+		v.Advertirf("infoFactura.propina", "propina.limite", "es %s, más del 10 %% del subtotal (%s); el facturador del SRI no lo admite (sección 9.16)", info.Propina, limite.Redondear(2))
+	}
 	v.Numero("infoFactura.importeTotal", info.ImporteTotal, 14, 2)
 	if len(f.Detalles) > 0 {
 		if !info.TotalSinImpuestos.Igual(sumaLineas) {
@@ -131,6 +138,17 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 		v.Numero(fmt.Sprintf("otrosRubrosTerceros[%d].total", i), r.Total, 14, 2)
 	}
 	return v.Hallazgos()
+}
+
+// VigenciaDetalles advierte de los IVA de tarifa general que no estaban
+// vigentes en la fecha de emisión (comprobante.Validador.VigenciaIVA). Lo
+// comparten la factura y la liquidación de compra.
+func VigenciaDetalles(v *comprobante.Validador, detalles []Detalle, emision comprobante.Fecha) {
+	for i, d := range detalles {
+		for j, imp := range d.Impuestos {
+			v.VigenciaIVA(fmt.Sprintf("detalles[%d].impuestos[%d].codigoPorcentaje", i, j), imp, emision)
+		}
+	}
 }
 
 // ValidarDetalles aplica a v las reglas de los detalles de un comprobante
@@ -162,9 +180,7 @@ func ValidarDetalles(v *comprobante.Validador, detalles []Detalle, decimales int
 		if len(d.Impuestos) == 0 {
 			v.Errorf(p+"impuestos", "requerido", "cada detalle debe declarar al menos un impuesto (use IVA 0%%, no objeto o exento si no grava)")
 		}
-		for j, imp := range d.Impuestos {
-			v.ImpuestoLinea(fmt.Sprintf("%simpuestos[%d].", p, j), imp)
-		}
+		v.ImpuestosDetalle(p, d.PrecioTotalSinImpuesto, d.Impuestos)
 		sumaLineas = sumaLineas.Sumar(d.PrecioTotalSinImpuesto)
 		sumaDescuentos = sumaDescuentos.Sumar(d.Descuento)
 	}

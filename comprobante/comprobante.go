@@ -212,7 +212,9 @@ const (
 	PagoEndosoTitulos        = "21"
 )
 
-// FormasPago describe las formas de pago vigentes de la Tabla 24.
+// FormasPago describe las formas de pago vigentes de la Tabla 24. Es una
+// copia de consulta: modificarla no altera las validaciones del SDK, que
+// usan FormaPagoDe.
 var FormasPago = map[string]string{
 	PagoSinSistemaFinanciero: "SIN UTILIZACION DEL SISTEMA FINANCIERO",
 	PagoCompensacionDeudas:   "COMPENSACIÓN DE DEUDAS",
@@ -274,7 +276,9 @@ const (
 	IVA13           = "10"
 )
 
-// TarifasIVA es la Tabla 17 de la ficha técnica v2.34.
+// TarifasIVA es la Tabla 17 de la ficha técnica v2.34. Es una copia de
+// consulta: modificarla no altera los cálculos ni las validaciones del SDK,
+// que usan TarifaIVADe.
 var TarifasIVA = map[string]TarifaIVA{
 	IVA0:            {IVA0, decimal.Entero(0), true, "0%"},
 	IVA12:           {IVA12, decimal.Entero(12), true, "12%"},
