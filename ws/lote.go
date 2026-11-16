@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/OsirisRoman/sri-ecuador-go/clave"
+	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
 )
 
 // Límites de un envío por lote (sección 7.5 y Tabla 8).
@@ -40,8 +41,8 @@ func (l Lote) XML() ([]byte, error) {
 	if err := clave.Validar(l.ClaveAcceso); err != nil {
 		return nil, fmt.Errorf("%w: clave de acceso del lote: %v", ErrLote, err)
 	}
-	if len(l.RUC) != 13 {
-		return nil, fmt.Errorf("%w: el RUC debe tener 13 dígitos", ErrLote)
+	if err := comprobante.ValidarRUC(l.RUC); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrLote, err)
 	}
 	if n := len(l.Comprobantes); n == 0 || n > MaxComprobantesLote {
 		return nil, fmt.Errorf("%w: tiene %d comprobantes; se admiten de 1 a %d", ErrLote, n, MaxComprobantesLote)
