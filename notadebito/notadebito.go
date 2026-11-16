@@ -19,6 +19,7 @@ import (
 
 	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
+	"github.com/OsirisRoman/sri-ecuador-go/internal/derivado"
 )
 
 // Version es la única versión del esquema de nota de débito.
@@ -56,8 +57,9 @@ type InfoNotaDebito struct {
 
 	// TotalSinImpuestos es la suma de los valores de los motivos.
 	TotalSinImpuestos decimal.Decimal `xml:"totalSinImpuestos"`
-	// Impuestos sobre el total. Con un único impuesto, Calcular toma como
-	// base el total sin impuestos; con varios, indique la base de cada uno.
+	// Impuestos sobre el total. Calcular deduce la base de un único IVA
+	// (total sin impuestos más ICE); con varios IVA, indique la base de
+	// cada uno.
 	Impuestos      comprobante.Lista[Impuesto]                 `xml:"impuestos"`
 	Compensaciones comprobante.Lista[comprobante.Compensacion] `xml:"compensaciones,omitempty"`
 	ValorTotal     decimal.Decimal                             `xml:"valorTotal"`
@@ -78,6 +80,10 @@ type Impuesto struct {
 	// autorizado por el servicio DIG del SRI (Anexo 20). El SRI lo contrasta
 	// y rechaza con el error 92 si no coincide.
 	ValorDevolucionIva *decimal.Decimal `xml:"valorDevolucionIva,omitempty"`
+
+	// derivado recuerda qué base y qué valor dedujo Calcular, para volver a
+	// deducirlos al recalcular. No se serializa.
+	derivado derivado.Marca
 }
 
 // EtiquetaXML implementa comprobante.Etiquetado.
@@ -127,9 +133,25 @@ func ImpuestoIVA(codigoIVA string) Impuesto {
 	return Impuesto{Codigo: comprobante.ImpuestoIVA, CodigoPorcentaje: codigoIVA}
 }
 
-// Calcular completa totalSinImpuestos (suma de los motivos), la tarifa,
-// base y valor de los impuestos, y valorTotal. Si hay un único pago sin
-// total se le asigna el valor total.
+// Calcular completa totalSinImpuestos (suma de los motivos), los impuestos
+// y valorTotal:
+//
+//   - ICE e IRBPNR: se deduce lo que la aplicación no indicó (la base es el
+//     total sin impuestos; el valor, base × tarifa %) y se respeta lo que
+//     indicó, con los mismos criterios que en el detalle de una factura
+//     (comprobante.RecalcularImpuestos).
+//   - IVA: la tarifa se toma de la Tabla 17. Con un único IVA, la base es
+//     el total sin impuestos más el ICE, que integra la base imponible del
+//     IVA (Tabla 18; art. 58 de la LRTI). Con varios IVA (motivos con
+//     tarifas distintas) la aplicación indica la base de cada uno, y entre
+//     todas deben sumar el total sin impuestos más el ICE.
+//   - valorTotal = totalSinImpuestos + impuestos − compensaciones.
+//   - Pagos: un único pago sigue al valor total (ver
+//     comprobante.AsignarPagoUnico).
+//
+// Calcular puede llamarse de nuevo después de cambiar los motivos o las
+// tarifas: lo que dedujo se vuelve a deducir y lo que indicó la aplicación
+// se conserva.
 func (n *NotaDebito) Calcular() {
 	total := decimal.Cero
 	for i := range n.Motivos {
@@ -137,32 +159,42 @@ func (n *NotaDebito) Calcular() {
 		total = total.Sumar(n.Motivos[i].Valor)
 	}
 	info := &n.InfoNotaDebito
+	anterior := info.TotalSinImpuestos
 	info.TotalSinImpuestos = total.Redondear(2)
-	valor := info.TotalSinImpuestos
+	valor, ice, ivas := info.TotalSinImpuestos, decimal.Cero, 0
 	for i := range info.Impuestos {
 		imp := &info.Impuestos[i]
-		if len(info.Impuestos) == 1 || imp.BaseImponible.EsCero() {
-			imp.BaseImponible = info.TotalSinImpuestos
+		if imp.Codigo == comprobante.ImpuestoIVA {
+			ivas++
+			continue
+		}
+		imp.derivado.Aplicar(anterior, info.TotalSinImpuestos, imp.Tarifa, &imp.BaseImponible, &imp.Valor)
+		if imp.Codigo == comprobante.ImpuestoICE {
+			ice = ice.Sumar(imp.Valor)
+		}
+		valor = valor.Sumar(imp.Valor)
+	}
+	for i := range info.Impuestos {
+		imp := &info.Impuestos[i]
+		if imp.Codigo != comprobante.ImpuestoIVA {
+			continue
+		}
+		if t, ok := comprobante.TarifaIVADe(imp.CodigoPorcentaje); ok && t.Fija {
+			imp.Tarifa = t.Tarifa
+		}
+		if ivas == 1 {
+			imp.BaseImponible = info.TotalSinImpuestos.Sumar(ice)
 		}
 		imp.BaseImponible = imp.BaseImponible.Redondear(2)
-		if imp.Codigo == comprobante.ImpuestoIVA {
-			if t, ok := comprobante.TarifaIVADe(imp.CodigoPorcentaje); ok && t.Fija {
-				imp.Tarifa = t.Tarifa
-			}
-			imp.Valor = imp.BaseImponible.Porcentaje(imp.Tarifa)
-		} else if imp.Valor.EsCero() && !imp.Tarifa.EsCero() {
-			imp.Valor = imp.BaseImponible.Porcentaje(imp.Tarifa)
-		}
-		imp.Valor = imp.Valor.Redondear(2)
+		imp.Valor = imp.BaseImponible.Porcentaje(imp.Tarifa).Redondear(2)
 		valor = valor.Sumar(imp.Valor)
 	}
 	for _, c := range info.Compensaciones {
 		valor = valor.Restar(c.Valor)
 	}
+	valorAnterior := info.ValorTotal
 	info.ValorTotal = valor.Redondear(2)
-	if len(info.Pagos) == 1 && info.Pagos[0].Total.EsCero() {
-		info.Pagos[0].Total = info.ValorTotal
-	}
+	comprobante.AsignarPagoUnico(info.Pagos, valorAnterior, info.ValorTotal)
 }
 
 // GenerarClaveAcceso compone la clave de acceso y la guarda en
@@ -277,6 +309,11 @@ func (n *NotaDebito) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 	case len(info.Impuestos) > 0 && bases.Cmp(baseIVA) < 0:
 		v.Advertirf(p+"impuestos", "iva.base", "las bases de IVA suman %s y el total sin impuestos más el ICE es %s; lo que no grava IVA se declara con tarifa 0 %%, no objeto (6) o exento (7)", bases.Redondear(2), baseIVA.Redondear(2))
 	}
+	totales := make([]comprobante.TotalImpuesto, len(info.Impuestos))
+	for i, imp := range info.Impuestos {
+		totales[i] = comprobante.TotalImpuesto{Codigo: imp.Codigo, CodigoPorcentaje: imp.CodigoPorcentaje, BaseImponible: imp.BaseImponible, Valor: imp.Valor}
+	}
+	v.Compensaciones(p+"compensaciones", info.Compensaciones, totales)
 	for _, c := range info.Compensaciones {
 		esperado = esperado.Restar(c.Valor)
 	}
