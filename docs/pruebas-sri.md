@@ -59,7 +59,7 @@ Conviene conocerlos porque condicionan cómo se integra el SDK:
 - La firma del SDK usa el prefijo `ds:`; se acepta también en los comprobantes cuyo XSD declara la firma con `ns1:`.
 - **Base del IVA de un detalle.** El SRI la recalcula: una base de 1,00 en una línea de 100,00 se rechaza con el código 52 («La base imponible del impuesto 1.0 no coincide con la calculada 100.0»). Es la regla `iva.base` del SDK.
 - **Detalle sin IVA.** Un detalle que solo lleva IRBPNR se autoriza; por eso `iva.ausente` es una advertencia.
-- **Redondeo del IVA.** El SRI autoriza el total de IVA calculado como suma de las líneas aunque difiera de la base acumulada (0,20 frente a 0,15 en diez líneas de 0,10) y el desempate «mitad al par» en cada línea. También autoriza un IVA de línea con **un centavo de diferencia** (0,16 sobre una base de 1,00 al 15 %), que el SDK rechaza (`iva.valor`): en ese punto el SDK es más estricto que el SRI.
+- **Redondeo del IVA.** El SRI autoriza el total de IVA calculado como suma de las líneas aunque difiera de la base acumulada (0,20 frente a 0,15 en diez líneas de 0,10) y el desempate «mitad al par» en cada línea. También autoriza un IVA de línea con **un centavo de diferencia** (0,16 sobre una base de 1,00 al 15 %), que el SDK rechaza (`iva.valor`) **a propósito**: es una decisión de integridad tributaria (D17), para que esas diferencias no se acumulen en el total.
 - **Clave desconocida y comprobante en proceso** reciben la misma respuesta de autorización (sin autorizaciones). Si el envío falló, el estado se resuelve reenviando con `Reanudar`, no consultando.
 
 ## Verificación independiente

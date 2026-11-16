@@ -168,10 +168,10 @@ Desde este proyecto no se ha enviado nada a producción, y el ambiente de prueba
 
 **Qué falta.**
 
-- **Decidir la tolerancia por línea.** El SRI autorizó un IVA de línea con un centavo de diferencia (0,16 sobre 1,00 al 15 %); el SDK lo rechaza (`iva.valor`, solo el redondeo al centavo más cercano). Hay que decidir si el SDK debe seguir siendo más estricto que el SRI, lo que protege del cobro de más pero rechaza documentos de otros sistemas que el SRI acepta, o admitir el centavo como advertencia.
+- **Modo de compatibilidad optativo (no implementado).** El SRI autoriza un centavo de diferencia en el IVA de una línea, que el SDK rechaza a propósito (decisión D17). Podría ofrecerse una opción para sistemas que calculan así, siempre que controle la diferencia acumulada en el total y respete los redondeos legítimos.
 - Comprobar en el SRI `iva.unico` (dos IVA en un detalle) y `totales.tarifa`, y si contrasta una nota de crédito con su factura o una retención con su sustento.
 - Observar un estado intermedio real (`EN PROCESO`, código 70, o la autorización anterior mientras se procesa una corrección): el SRI resolvió todo antes de la primera consulta.
 
 **Qué no puede resolver el SDK.** Las notas de crédito anteriores sobre una misma factura (hay que pasarlas a `AsociarFactura`), los importes del sustento en la retención 1.0.0 (que no los declara) y las fechas de las tarifas que no son la general (`comprobante/vigencia.go`).
 
-**Terminado cuando:** se decida la tolerancia por línea y cada punto restante tenga un resultado en [`pruebas-sri.md`](pruebas-sri.md).
+**Terminado cuando:** cada punto restante tenga un resultado en [`pruebas-sri.md`](pruebas-sri.md). El modo de compatibilidad es una mejora opcional, no una condición.

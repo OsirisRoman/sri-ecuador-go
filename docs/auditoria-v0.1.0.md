@@ -61,7 +61,7 @@ Con la suite reproducible de la auditoría, conservada fuera del repositorio, co
 
 ## Contraste con el SRI
 
-Una ronda en el ambiente de pruebas con el código de 0.2.0 confirmó con el SRI real: que rechaza (52) la base de IVA incoherente de AUD-001; que el reenvío corregido con la misma clave tras un `NO AUTORIZADO` se recibe y se autoriza, y que el SDK lo da por autorizado y verificado (AUD-002); y que el SRI responde a una clave desconocida igual que a un comprobante en proceso (AUD-005), lo que llevó a precisar en la guía que un estado desconocido se resuelve reenviando, no consultando. También mostró que el SRI **tolera un centavo** en el IVA de una línea: la regla de AUD-003 es más estricta que el SRI, decisión pendiente (pendiente 15). Detalle en [`pruebas-sri.md`](pruebas-sri.md).
+Una ronda en el ambiente de pruebas con el código de 0.2.0 confirmó con el SRI real: que rechaza (52) la base de IVA incoherente de AUD-001; que el reenvío corregido con la misma clave tras un `NO AUTORIZADO` se recibe y se autoriza, y que el SDK lo da por autorizado y verificado (AUD-002); y que el SRI responde a una clave desconocida igual que a un comprobante en proceso (AUD-005), lo que llevó a precisar en la guía que un estado desconocido se resuelve reenviando, no consultando. También mostró que el SRI **tolera un centavo** en el IVA de una línea. La regla de AUD-003 se mantiene más estricta que el SRI por decisión del propietario (D17): evita la acumulación que motivó el hallazgo y conserva los redondeos legítimos que el SRI autoriza. Detalle en [`pruebas-sri.md`](pruebas-sri.md).
 
 ## Comprobantes ya autorizados por el SRI
 
@@ -71,7 +71,7 @@ Las reglas nuevas se aplicaron, en local y sin enviar nada, a los 24 comprobante
 
 Lo que no se puede resolver con código, o solo en parte. Está también en [`pendientes.md`](pendientes.md) (punto 15).
 
-- **Tolerancia por línea (AUD-003).** El SRI autoriza un centavo de diferencia en el IVA de una línea; el SDK no. Falta decidir si se mantiene (pendiente 15).
+- **Tolerancia por línea (AUD-003).** El SRI autoriza un centavo de diferencia en el IVA de una línea; el SDK no, por decisión (D17). Un modo de compatibilidad optativo queda como posible mejora, sin implementar.
 - **Reglas sin contrastar con el SRI:** `iva.unico`, `totales.tarifa` y si el SRI contrasta notas de crédito y retenciones con su origen.
 - **Estados intermedios reales:** el SRI resolvió todo antes de la primera consulta; el lapso en que mostraría el resultado de la versión anterior de una corrección solo se ha simulado.
 - **Notas de crédito anteriores.** `ValidarContra` acumula las que la aplicación le pasa; el SDK no las consulta al SRI. Una nota leída con `Parse` no conoce su factura hasta que se le asocia.

@@ -48,7 +48,7 @@ Comprobantes que la v0.1.0 firmaba ahora se rechazan o cambian de estado. Las re
 
 ### Limitaciones
 
-Las de la v0.1.0 siguen vigentes, salvo la nota de crédito 1.0.0, ya autorizada por el SRI. Una ronda en el ambiente de pruebas con este código confirmó la regla de base del IVA, el reenvío corregido con la misma clave y los dos criterios de redondeo del total ([`docs/pruebas-sri.md`](docs/pruebas-sri.md)). Queda pendiente (15): el SRI autoriza un centavo de diferencia en el IVA de una línea que `iva.valor` rechaza, y `iva.unico`, `totales.tarifa` y los estados intermedios no se han observado en el SRI.
+Las de la v0.1.0 siguen vigentes, salvo la nota de crédito 1.0.0, ya autorizada por el SRI. Una ronda en el ambiente de pruebas con este código confirmó la regla de base del IVA, el reenvío corregido con la misma clave y los dos criterios de redondeo del total ([`docs/pruebas-sri.md`](docs/pruebas-sri.md)). El SRI autoriza un centavo de diferencia en el IVA de una línea que `iva.valor` rechaza: el SDK es más estricto **por decisión** (D17), para evitar diferencias acumuladas. Sin observar en el SRI (pendiente 15): `iva.unico`, `totales.tarifa` y los estados intermedios.
 
 ## v0.1.0 — primera versión pública (pre-release) — 2026-11-15
 

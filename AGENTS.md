@@ -54,3 +54,5 @@ gofmt -l <directorios del proyecto>  # no ejecutes gofmt sobre "." si existe res
 | Datos que caducan y cómo actualizarlos | `docs/actualizar-catalogos.md` |
 | Devolución automática de IVA (DIG), no implementada | `docs/devolucion-iva-dig.md` |
 | Fuentes y licencias | `docs/fuentes.md`, `NOTICE` |
+| Auditoría de v0.1.0 y certificación de 0.2.0 | `docs/auditoria-v0.1.0.md`, `docs/certificacion-v0.2.0.md` |
+| Revisar el SDK sin contexto previo | `docs/revision-independiente.md` |
