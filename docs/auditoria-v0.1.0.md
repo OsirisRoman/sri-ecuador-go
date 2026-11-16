@@ -59,6 +59,10 @@ Con la suite reproducible de la auditoría, conservada fuera del repositorio, co
 | Atributo repetido; salto de línea literal en un atributo | aceptados (el segundo, con una firma que `xmlsec1` rechaza) | atributo repetido rechazado; normalización igual a libxml2 |
 | Caracteres de control en un texto | 0 errores, sustituidos por U+FFFD | 1 error (`caracter-invalido`) |
 
+## Contraste con el SRI
+
+Una ronda en el ambiente de pruebas con el código de 0.2.0 confirmó con el SRI real: que rechaza (52) la base de IVA incoherente de AUD-001; que el reenvío corregido con la misma clave tras un `NO AUTORIZADO` se recibe y se autoriza, y que el SDK lo da por autorizado y verificado (AUD-002); y que el SRI responde a una clave desconocida igual que a un comprobante en proceso (AUD-005), lo que llevó a precisar en la guía que un estado desconocido se resuelve reenviando, no consultando. También mostró que el SRI **tolera un centavo** en el IVA de una línea. La regla de AUD-003 se mantiene más estricta que el SRI por decisión del propietario (D17): evita la acumulación que motivó el hallazgo y conserva los redondeos legítimos que el SRI autoriza. Detalle en [`pruebas-sri.md`](pruebas-sri.md).
+
 ## Comprobantes ya autorizados por el SRI
 
 Las reglas nuevas se aplicaron, en local y sin enviar nada, a los 24 comprobantes que el ambiente de pruebas del SRI autorizó a este proyecto (los seis tipos, en todas sus versiones): **ningún error ni advertencia nuevos** (con `SustentoEstricto` en la retención), la firma verifica, el RIDE se genera y, en los 20 de los que se conserva el XML enviado, la huella del enviado coincide con la del comprobante que devolvió el SRI. Es decir, las reglas nuevas no rechazan nada que el SRI haya autorizado, y la comparación de `Reanudar` funciona con respuestas reales. Lo que no prueba es que el SRI rechace lo que ahora rechaza el SDK.
@@ -67,8 +71,9 @@ Las reglas nuevas se aplicaron, en local y sin enviar nada, a los 24 comprobante
 
 Lo que no se puede resolver con código, o solo en parte. Está también en [`pendientes.md`](pendientes.md) (punto 15).
 
-- **Si el SRI rechaza lo que ahora rechaza el SDK.** Las reglas nuevas se basan en la ficha y la ley, y no rechazan ninguno de los comprobantes que el SRI autorizó (sección anterior), pero no se han enviado casos incorrectos al ambiente de pruebas: no se sabe si el SRI devuelve con el código 52 una base de IVA incoherente o un detalle sin IVA, ni si acepta un total de IVA calculado por líneas que difiera de la base acumulada en más de un centavo.
-- **El reenvío con la misma clave en el SRI real.** El SDK lo resuelve comparando con el comprobante que devuelve la autorización; el comportamiento exacto del SRI (si responde 43 o recibe el nuevo, y qué devuelve la autorización mientras procesa la corrección) solo se ha simulado.
+- **Tolerancia por línea (AUD-003).** El SRI autoriza un centavo de diferencia en el IVA de una línea; el SDK no, por decisión (D17). Un modo de compatibilidad optativo queda como posible mejora, sin implementar.
+- **Reglas sin contrastar con el SRI:** `iva.unico`, `totales.tarifa` y si el SRI contrasta notas de crédito y retenciones con su origen.
+- **Estados intermedios reales:** el SRI resolvió todo antes de la primera consulta; el lapso en que mostraría el resultado de la versión anterior de una corrección solo se ha simulado.
 - **Notas de crédito anteriores.** `ValidarContra` acumula las que la aplicación le pasa; el SDK no las consulta al SRI. Una nota leída con `Parse` no conoce su factura hasta que se le asocia.
 - **Retención 1.0.0.** No declara los importes del sustento, así que no hay con qué contrastar sus bases.
 - **Vigencia de tarifas.** Solo las tarifas generales, con fechas tomadas de la ley (la ficha no las publica); son advertencias y caducan con cada cambio de tarifa.

@@ -306,3 +306,16 @@ func TestCorreccionConLaMismaClave(t *testing.T) {
 		t.Errorf("A autorizado: estado=%v err=%v", estado(res), err)
 	}
 }
+
+// Respuesta real del SRI (ronda de certificación de 0.2.0) a una clave que
+// nunca recibió: sin autorizaciones y numeroComprobantes 0. Es idéntica a
+// la de un comprobante en proceso, así que queda pendiente, sin error; la
+// guía indica reenviar con Reanudar cuando el envío falló.
+func TestClaveDesconocidaComoEnElSRI(t *testing.T) {
+	clave := ejemplo.Factura(comprobante.Hoy(), "000000998").InfoTributaria.ClaveAcceso
+	cl := servidorSRI(t, sobreRecepcion("RECIBIDA"), sobreAutorizacion(`<claveAccesoConsultada>`+clave+`</claveAccesoConsultada><numeroComprobantes>0</numeroComprobantes><autorizaciones/>`))
+	res, err := cl.Autorizar(context.Background(), clave)
+	if err != nil || res.Estado != sri.EstadoRecibido || res.Autorizacion != nil {
+		t.Errorf("estado=%v err=%v", estado(res), err)
+	}
+}

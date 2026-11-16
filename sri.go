@@ -464,6 +464,11 @@ func (c *Cliente) Reanudar(ctx context.Context, xmlFirmado []byte, advertencias 
 // Reanudar, pero sin reenviarlo. Es la forma recomendada de resolver más
 // tarde un comprobante que quedó en EstadoRecibido: a diferencia de
 // Autorizar, detecta un EstadoDiscrepancia.
+//
+// Úsela solo si la recepción está confirmada (RECIBIDA, 43 o 70). El SRI
+// responde igual, sin autorizaciones, a una clave que nunca recibió y a un
+// comprobante en proceso, y ambos casos dan EstadoRecibido: si el estado es
+// desconocido porque falló el envío, reenvíe con Reanudar, que es seguro.
 func (c *Cliente) ConsultarDocumento(ctx context.Context, xmlFirmado []byte) (*Resultado, error) {
 	claveAcceso, _, err := leerClave(xmlFirmado)
 	if err != nil {

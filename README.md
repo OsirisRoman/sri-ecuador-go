@@ -51,13 +51,15 @@ No es un SDK teórico: se comprobó enviando comprobantes al **ambiente de prueb
 |---|---|
 | Factura v1.0.0, 1.1.0, 2.0.0 y 2.1.0 | **AUTORIZADO** (firma RSA-SHA256 y RSA-SHA1) |
 | Factura de exportación y de reembolso de gastos | **AUTORIZADO** |
-| Nota de crédito (total y parcial) | **AUTORIZADO** |
+| Nota de crédito v1.1.0 (total y parcial) y v1.0.0 | **AUTORIZADO** |
 | Nota de débito | **AUTORIZADO** |
 | Comprobante de retención v2.0.0 y v1.0.0 | **AUTORIZADO** |
 | Guía de remisión v1.0.0 y 1.1.0 | **AUTORIZADO** |
 | Liquidación de compra v1.0.0 y 1.1.0 | **AUTORIZADO** |
 | Envío por lotes | Recibido; resultado por comprobante |
 | Manejo de respuestas (reenvío del mismo comprobante ya autorizado, firma alterada, XML fuera de esquema) | El SDK interpreta los códigos del SRI (43, 39, 35); al reenviar, comprueba que el autorizado sea el documento enviado |
+| Corrección de un comprobante no autorizado con la misma clave y secuencial (ficha 5.10) | **AUTORIZADO**, y el SDK verifica que es el corregido |
+| Base de IVA incoherente con su línea (enviada a propósito, sin la validación local) | **NO AUTORIZADO** (52), como lo rechaza el SDK |
 
 Además:
 
@@ -73,7 +75,7 @@ El detalle, con las condiciones de las pruebas, está en [docs/pruebas-sri.md](d
 
 - **Solo el ambiente de pruebas, un emisor y un certificado** (Banco Central del Ecuador). No se ha enviado nada a producción ni se han probado certificados de otras entidades.
 - **La devolución automática de IVA (servicios DIG) no está implementada.** El SDK rechaza un `valorDevolucionIva` mayor que cero para no emitir importes incorrectos. La investigación está en [docs/devolucion-iva-dig.md](docs/devolucion-iva-dig.md).
-- **Algunos casos solo tienen pruebas locales:** ICE e IRBPNR, factura comercial negociable, retenciones al exterior, entre otros. También las reglas de coherencia de importes añadidas en la versión 0.2.0, que no se han contrastado con el SRI.
+- **Algunos casos solo tienen pruebas locales:** ICE e IRBPNR, factura comercial negociable, retenciones al exterior, entre otros. De las reglas de coherencia de importes de la versión 0.2.0, el SRI confirmó la de la base del IVA; en el IVA de cada línea el SDK es más estricto que el SRI, que tolera un centavo, por decisión de integridad tributaria ([D17](docs/decisiones.md)).
 - **La validación revisa la coherencia del comprobante, no la ley aplicable:** no sabe qué tarifa de IVA o qué retención corresponde a cada bien o pago, y solo contrasta una nota de crédito o una retención con su documento de origen en la medida en que lo conoce.
 - **Los catálogos caducan.** Antes de adoptarlo, compruebe en <https://www.sri.gob.ec/facturacion-electronica> si hay una ficha posterior a la 2.34 y revise [docs/actualizar-catalogos.md](docs/actualizar-catalogos.md).
 - El SDK no asigna secuenciales, no guarda comprobantes y no sustituye el criterio tributario.
