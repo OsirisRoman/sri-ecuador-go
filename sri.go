@@ -46,8 +46,10 @@ import (
 )
 
 // Comprobante es lo que el Cliente necesita de un documento para emitirlo.
-// Lo implementan *factura.Factura, *notacredito.NotaCredito,
-// *notadebito.NotaDebito y *retencion.ComprobanteRetencion.
+// Lo implementan *factura.Factura, *liquidacion.LiquidacionCompra,
+// *notacredito.NotaCredito, *notadebito.NotaDebito,
+// *guiaremision.GuiaRemision, *retencion.ComprobanteRetencion y
+// *retencion.ComprobanteV1.
 type Comprobante interface {
 	// XML serializa el comprobante sin firma.
 	XML() ([]byte, error)
@@ -112,13 +114,20 @@ type Resultado struct {
 	// Recepcion y Autorizacion son las respuestas completas, cuando las hay.
 	Recepcion    *ws.RespuestaRecepcion
 	Autorizacion *ws.Autorizacion
+	// Autorizaciones son todas las autorizaciones que el SRI devolvió para
+	// la clave en la última consulta, en el orden en que llegaron: una por
+	// cada envío que procesó. Autorizacion es la que determina el Estado.
+	// Sirve para conciliar cuando hay varias versiones de un comprobante
+	// con la misma clave.
+	Autorizaciones []ws.Autorizacion
 	// Advertencias son los hallazgos locales que no impidieron la emisión.
 	Advertencias comprobante.Hallazgos
-	// Verificado indica que el comprobante que el SRI devolvió en la
-	// autorización es, en contenido, Resultado.XMLFirmado (misma
-	// xades.Huella). Es false si no hubo autorización, si el SRI no devolvió
-	// el comprobante o si el resultado viene de Autorizar, que solo conoce
-	// la clave.
+	// Verificado indica que la autorización que determina el Estado
+	// contiene, en contenido, Resultado.XMLFirmado (misma xades.Huella): el
+	// AUTORIZADO o el NO AUTORIZADO es el de ese documento. Con Reanudar,
+	// Emitir y ConsultarDocumento, EstadoAutorizado implica Verificado. Es
+	// false si no hay resultado, si el rechazo no trae el comprobante o si
+	// el resultado viene de Autorizar, que solo conoce la clave.
 	Verificado bool
 }
 
@@ -139,18 +148,20 @@ func (r *Resultado) FechaAutorizacion() (time.Time, bool) {
 }
 
 // XMLAutorizado devuelve el documento que debe conservarse y entregarse al
-// receptor: el comprobante firmado envuelto en el elemento <autorizacion>
-// con el estado, número y fecha que asignó el SRI. Devuelve nil si el
-// comprobante no está autorizado.
+// receptor: el comprobante firmado, tal como lo devolvió el SRI, envuelto
+// en el elemento <autorizacion> con el estado, número y fecha que asignó.
+// Devuelve nil si el comprobante no está autorizado o si la autorización no
+// trae el comprobante.
+//
+// Si el resultado viene de Autorizar (Verificado es false), el comprobante
+// es el que el SRI tiene registrado con esa clave, que no se ha contrastado
+// con ningún documento local.
 func (r *Resultado) XMLAutorizado() []byte {
-	if !r.Autorizado() || r.Autorizacion == nil {
+	if !r.Autorizado() || r.Autorizacion == nil || strings.TrimSpace(r.Autorizacion.Comprobante) == "" {
 		return nil
 	}
 	a := r.Autorizacion
 	doc := a.Comprobante
-	if strings.TrimSpace(doc) == "" {
-		doc = string(r.XMLFirmado)
-	}
 	var sb strings.Builder
 	sb.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n<autorizacion>")
 	campo := func(nombre, valor string) {
@@ -187,6 +198,15 @@ var (
 	// desconocido. El Resultado queda en EstadoRecibido (pendiente): no
 	// genere otro comprobante; vuelva a consultar más tarde.
 	ErrEstadoIndeterminado = errors.New("sri: estado de autorización indeterminado")
+	// ErrSinComprobante indica que el SRI informa AUTORIZADO para la clave
+	// pero la autorización no trae el comprobante, de modo que no se puede
+	// comprobar que el documento autorizado sea el que se envió o se
+	// consulta. Es un estado indeterminado (errors.Is con
+	// ErrEstadoIndeterminado también es true): el Resultado queda en
+	// EstadoRecibido, con la autorización del SRI en Resultado.Autorizacion
+	// para conciliar (número y fecha de autorización). No entregue el
+	// documento como autorizado; vuelva a consultar más tarde.
+	ErrSinComprobante = errors.New("sri: el SRI informa AUTORIZADO sin devolver el comprobante; no se puede comprobar que sea este documento")
 	// ErrRespuestaIncoherente indica que la respuesta de autorización no
 	// corresponde a lo consultado: otra clave de acceso u otro ambiente. Se
 	// trata como estado desconocido; el Resultado queda en EstadoRecibido.
@@ -411,11 +431,9 @@ func (c *Cliente) Emitir(ctx context.Context, doc Comprobante) (*Resultado, erro
 // SRI responde con los códigos 43 o 70 y se pasa a consultar la
 // autorización).
 //
-// Lo que el SRI devuelve en la autorización se compara con xmlFirmado
-// (xades.Huella). Si el SRI tiene registrado con esa clave un comprobante
-// distinto (por ejemplo, porque se reenvió con la misma clave una versión
-// cambiada), el Resultado queda en EstadoDiscrepancia y el error es un
-// *ErrorDiscrepancia: el estado del SRI no es el de este documento.
+// El resultado es el de la autorización que contiene xmlFirmado (misma
+// xades.Huella), esté donde esté entre las que devuelve el SRI; ver
+// ConsultarDocumento. EstadoAutorizado implica Verificado.
 func (c *Cliente) Reanudar(ctx context.Context, xmlFirmado []byte, advertencias comprobante.Hallazgos) (*Resultado, error) {
 	res, err := c.Enviar(ctx, xmlFirmado)
 	if res != nil {
@@ -424,46 +442,53 @@ func (c *Cliente) Reanudar(ctx context.Context, xmlFirmado []byte, advertencias 
 	if err != nil || res.Estado == EstadoDevuelto {
 		return res, err
 	}
+	doc, err := nuevoDocumento(xmlFirmado)
+	if err != nil {
+		return res, err
+	}
 	// Si el SRI acaba de recibir este documento (RECIBIDA, o 70: en
-	// procesamiento), un NO AUTORIZADO de otra versión con la misma clave
+	// procesamiento), el NO AUTORIZADO de otra versión con la misma clave
 	// es el resultado anterior a la corrección (ficha 5.10 y 5.11): se
 	// sigue esperando el de este documento.
-	var ajeno func(*Resultado) bool
-	if recibidoAhora(res.Recepcion) {
-		enviado, errH := xades.Huella(xmlFirmado)
-		if errH != nil {
-			return res, fmt.Errorf("sri: el documento firmado es ilegible: %w", errH)
-		}
-		ajeno = func(r *Resultado) bool {
-			if r.Estado != EstadoNoAutorizado || r.Autorizacion == nil || strings.TrimSpace(r.Autorizacion.Comprobante) == "" {
-				return false
-			}
-			h, err := xades.Huella([]byte(strings.TrimSpace(r.Autorizacion.Comprobante)))
-			return err == nil && h != enviado
-		}
-	}
-	aut, err := c.esperarAutorizacion(ctx, res.ClaveAcceso, ajeno)
+	doc.recienRecibido = recibidoAhora(res.Recepcion)
+	aut, err := c.esperarAutorizacion(ctx, res.ClaveAcceso, doc)
 	if aut == nil {
 		return res, err
 	}
-	if err == nil && ajeno != nil && ajeno(aut) {
-		// Agotadas las consultas, el SRI solo muestra el resultado de la
-		// versión anterior: este documento sigue pendiente.
-		aut.Estado, aut.Autorizacion, aut.Mensajes = EstadoRecibido, nil, nil
-	}
 	aut.Recepcion = res.Recepcion
 	aut.Advertencias = advertencias
-	if errCmp := comparar(aut, xmlFirmado); errCmp != nil {
-		return aut, errCmp
-	}
 	return aut, err
 }
 
 // ConsultarDocumento consulta una sola vez la autorización de un
-// comprobante ya firmado y compara lo que devuelve el SRI con él, como hace
-// Reanudar, pero sin reenviarlo. Es la forma recomendada de resolver más
-// tarde un comprobante que quedó en EstadoRecibido: a diferencia de
-// Autorizar, detecta un EstadoDiscrepancia.
+// comprobante ya firmado, sin reenviarlo. Es la forma recomendada de
+// resolver más tarde un comprobante que quedó en EstadoRecibido.
+//
+// El SRI puede devolver varias autorizaciones para una clave, una por cada
+// envío que procesó (el original rechazado y su corrección, por ejemplo), y
+// su orden no está garantizado. El resultado no depende de él: cada
+// autorización se vincula con xmlFirmado comparando la xades.Huella del
+// comprobante que contiene.
+//
+//   - Una autorización AUTORIZADO que contiene este documento:
+//     EstadoAutorizado, con Verificado.
+//   - Un AUTORIZADO que contiene otro documento: EstadoDiscrepancia y
+//     *ErrorDiscrepancia. La clave ya tiene un comprobante válido, que no
+//     es este.
+//   - Un AUTORIZADO que no trae el comprobante: no se puede vincular. El
+//     estado es indeterminado: EstadoRecibido con ErrSinComprobante.
+//   - Sin ningún AUTORIZADO, lo que diga el SRI de este documento: NO
+//     AUTORIZADO (EstadoNoAutorizado, con Verificado y sus mensajes) o en
+//     proceso (EstadoRecibido).
+//   - Si solo hay rechazos de otras versiones, este documento no tiene
+//     resultado: EstadoDiscrepancia, salvo en Reanudar cuando el SRI acaba
+//     de recibirlo, que queda pendiente (EstadoRecibido) a la espera del
+//     suyo.
+//   - Un rechazo sin comprobante no se puede vincular y se informa como
+//     EstadoNoAutorizado sin Verificado: corregir y reenviar con la misma
+//     clave es seguro en cualquier caso.
+//
+// Resultado.Autorizaciones conserva todas las autorizaciones recibidas.
 //
 // Úsela solo si la recepción está confirmada (RECIBIDA, 43 o 70). El SRI
 // responde igual, sin autorizaciones, a una clave que nunca recibió y a un
@@ -474,37 +499,29 @@ func (c *Cliente) ConsultarDocumento(ctx context.Context, xmlFirmado []byte) (*R
 	if err != nil {
 		return nil, err
 	}
-	res, err := c.Autorizar(ctx, claveAcceso)
-	if res == nil {
+	doc, err := nuevoDocumento(xmlFirmado)
+	if err != nil {
 		return nil, err
 	}
-	if errCmp := comparar(res, xmlFirmado); errCmp != nil {
-		return res, errCmp
-	}
-	return res, err
+	return c.consultar(ctx, claveAcceso, doc)
 }
 
-// comparar fija res.XMLFirmado y contrasta el comprobante que el SRI
-// devolvió en la autorización con xmlFirmado. Si no coinciden, pasa res a
-// EstadoDiscrepancia y devuelve un *ErrorDiscrepancia.
-func comparar(res *Resultado, xmlFirmado []byte) error {
-	res.XMLFirmado = xmlFirmado
-	a := res.Autorizacion
-	if a == nil || strings.TrimSpace(a.Comprobante) == "" {
-		return nil
-	}
-	enviado, err := xades.Huella(xmlFirmado)
+// documento es el comprobante firmado con el que se vinculan las
+// autorizaciones de una respuesta.
+type documento struct {
+	xml    []byte
+	huella [32]byte
+	// recienRecibido indica que el SRI aceptó este documento en el envío
+	// que precede a la consulta.
+	recienRecibido bool
+}
+
+func nuevoDocumento(xmlFirmado []byte) (*documento, error) {
+	h, err := xades.Huella(xmlFirmado)
 	if err != nil {
-		return fmt.Errorf("sri: el documento firmado es ilegible: %w", err)
+		return nil, fmt.Errorf("sri: el documento firmado es ilegible: %w", err)
 	}
-	e := &ErrorDiscrepancia{ClaveAcceso: res.ClaveAcceso, EstadoSRI: strings.TrimSpace(a.Estado), Enviado: enviado}
-	e.Registrado, e.Causa = xades.Huella([]byte(strings.TrimSpace(a.Comprobante)))
-	if e.Causa == nil && e.Registrado == enviado {
-		res.Verificado = true
-		return nil
-	}
-	res.Estado = EstadoDiscrepancia
-	return e
+	return &documento{xml: xmlFirmado, huella: h}, nil
 }
 
 // Enviar entrega un documento firmado al servicio de recepción. El
@@ -538,10 +555,21 @@ func (c *Cliente) Enviar(ctx context.Context, xmlFirmado []byte) (*Resultado, er
 	return res, nil
 }
 
-// Autorizar consulta una sola vez el resultado de un comprobante por su
-// clave de acceso. Útil para resolver más tarde los que quedaron en
-// EstadoRecibido.
+// Autorizar consulta una sola vez el estado de una clave de acceso.
+//
+// Solo conoce la clave: no puede comprobar qué documento autorizó el SRI,
+// y Resultado.Verificado es siempre false. Para saber si el comprobante
+// autorizado es el que usted envió, use ConsultarDocumento con el XML
+// firmado. Con varias autorizaciones para la clave, el Estado es
+// EstadoAutorizado si alguna lo está; si no, pendiente si alguna está en
+// proceso; si no, EstadoNoAutorizado con la de fecha más reciente.
 func (c *Cliente) Autorizar(ctx context.Context, claveAcceso string) (*Resultado, error) {
+	return c.consultar(ctx, claveAcceso, nil)
+}
+
+// consultar pide al SRI las autorizaciones de una clave y las interpreta;
+// con doc, respecto de ese documento.
+func (c *Cliente) consultar(ctx context.Context, claveAcceso string, doc *documento) (*Resultado, error) {
 	c2, err := clave.Analizar(claveAcceso)
 	if err != nil {
 		return nil, err
@@ -554,26 +582,172 @@ func (c *Cliente) Autorizar(ctx context.Context, claveAcceso string) (*Resultado
 		return nil, err
 	}
 	res := &Resultado{ClaveAcceso: claveAcceso, Estado: EstadoRecibido}
+	if doc != nil {
+		res.XMLFirmado = doc.xml
+	}
 	if err := c.coherente(resp, claveAcceso); err != nil {
 		return res, err
 	}
-	if a := resp.Autorizada(); a != nil {
-		res.Estado, res.Autorizacion, res.Mensajes = EstadoAutorizado, a, a.Mensajes
-		return res, nil
+	res.Autorizaciones = resp.Autorizaciones
+	return res, interpretar(res, doc)
+}
+
+// vinculo es la relación entre una autorización y el documento consultado.
+type vinculo int
+
+const (
+	// sinComprobante: la autorización no trae el comprobante.
+	sinComprobante vinculo = iota
+	// ilegible: trae un comprobante que no se puede leer.
+	ilegible
+	// ajena: trae otro documento.
+	ajena
+	// propia: trae el documento consultado (misma xades.Huella).
+	propia
+)
+
+// vinculada es una autorización con su vínculo.
+type vinculada struct {
+	*ws.Autorizacion
+	vinculo vinculo
+	huella  [32]byte
+	causa   error
+}
+
+// interpretar fija el Estado de res a partir de res.Autorizaciones. No
+// depende del orden de la lista: cada autorización cuenta por su estado y,
+// si hay documento, por el comprobante que contiene.
+func interpretar(res *Resultado, doc *documento) error {
+	todas := make([]vinculada, len(res.Autorizaciones))
+	for i := range res.Autorizaciones {
+		v := vinculada{Autorizacion: &res.Autorizaciones[i]}
+		if x := strings.TrimSpace(v.Comprobante); doc != nil && x != "" {
+			if v.huella, v.causa = xades.Huella([]byte(x)); v.causa != nil {
+				v.vinculo = ilegible
+			} else if v.huella == doc.huella {
+				v.vinculo = propia
+			} else {
+				v.vinculo = ajena
+			}
+		}
+		todas[i] = v
 	}
-	if resp.EnProceso() {
-		return res, nil
+	if doc == nil || len(todas) == 0 {
+		return porEstado(res, todas)
 	}
-	u := resp.Ultima()
-	res.Autorizacion, res.Mensajes = u, u.Mensajes
-	if !u.NoAutorizado() {
+	con := func(vs []vinculada, cumple func(vinculada) bool) (out []vinculada) {
+		for _, v := range vs {
+			if cumple(v) {
+				out = append(out, v)
+			}
+		}
+		return out
+	}
+	es := func(k vinculo) func(vinculada) bool { return func(v vinculada) bool { return v.vinculo == k } }
+	discrepancia := func(v vinculada) error {
+		res.Estado, res.Autorizacion, res.Mensajes = EstadoDiscrepancia, v.Autorizacion, v.Mensajes
+		return &ErrorDiscrepancia{ClaveAcceso: res.ClaveAcceso, EstadoSRI: strings.TrimSpace(v.Estado), Enviado: doc.huella, Registrado: v.huella, Causa: v.causa}
+	}
+
+	// 1. Una clave solo puede tener un comprobante autorizado.
+	if aut := con(todas, func(v vinculada) bool { return v.Autorizado() }); len(aut) > 0 {
+		if p := con(aut, es(propia)); len(p) > 0 {
+			res.Estado, res.Autorizacion, res.Mensajes, res.Verificado = EstadoAutorizado, p[0].Autorizacion, p[0].Mensajes, true
+			return nil
+		}
+		for _, k := range []vinculo{ajena, ilegible} {
+			if o := con(aut, es(k)); len(o) > 0 {
+				return discrepancia(o[0])
+			}
+		}
+		// Autorizado, pero no se sabe qué documento: no se puede dar por
+		// autorizado este ni afirmar que es otro.
+		res.Autorizacion, res.Mensajes = aut[0].Autorizacion, aut[0].Mensajes
+		return fmt.Errorf("%w: %w", ErrEstadoIndeterminado, ErrSinComprobante)
+	}
+	// 2. Lo que el SRI dice de este documento.
+	if p := con(todas, es(propia)); len(p) > 0 {
+		err := porEstado(res, p)
+		res.Verificado = res.Estado == EstadoNoAutorizado
+		return err
+	}
+	// 3. Ninguna autorización es de este documento.
+	if len(con(todas, func(v vinculada) bool { return v.EnProceso() })) > 0 {
+		return nil
+	}
+	if o := con(todas, func(v vinculada) bool { return !v.NoAutorizado() }); len(o) > 0 {
+		res.Autorizacion, res.Mensajes = o[0].Autorizacion, o[0].Mensajes
+		return fmt.Errorf("%w: %q", ErrEstadoIndeterminado, o[0].Estado)
+	}
+	// Solo rechazos. Uno sin comprobante puede ser el de este documento.
+	if s := con(todas, es(sinComprobante)); len(s) > 0 {
+		return porEstado(res, s)
+	}
+	if i := con(todas, es(ilegible)); len(i) > 0 {
+		return discrepancia(masReciente(i))
+	}
+	if doc.recienRecibido {
+		// El SRI todavía muestra solo el rechazo de la versión anterior.
+		return nil
+	}
+	return discrepancia(masReciente(todas))
+}
+
+// porEstado fija el Estado de res según los estados de un conjunto de
+// autorizaciones, sin atender a su orden: autorizado si alguna lo está;
+// pendiente si alguna está en proceso; indeterminado si alguna tiene un
+// estado vacío o desconocido; y no autorizado, con la de fecha más
+// reciente, si todas son rechazos.
+func porEstado(res *Resultado, vs []vinculada) error {
+	var rechazos []vinculada
+	var rara *vinculada
+	pendiente := false
+	for i, v := range vs {
+		switch {
+		case v.Autorizado():
+			res.Estado, res.Autorizacion, res.Mensajes = EstadoAutorizado, v.Autorizacion, v.Mensajes
+			return nil
+		case v.EnProceso():
+			pendiente = true
+		case v.NoAutorizado():
+			rechazos = append(rechazos, v)
+		case rara == nil:
+			rara = &vs[i]
+		}
+	}
+	switch {
+	case pendiente || len(vs) == 0:
+		return nil
+	case rara != nil:
 		// Un estado vacío o desconocido no es un rechazo: tratarlo como
 		// definitivo podría llevar a emitir otro comprobante mientras el
 		// original sigue en curso.
-		return res, fmt.Errorf("%w: %q", ErrEstadoIndeterminado, u.Estado)
+		res.Autorizacion, res.Mensajes = rara.Autorizacion, rara.Mensajes
+		return fmt.Errorf("%w: %q", ErrEstadoIndeterminado, rara.Estado)
 	}
-	res.Estado = EstadoNoAutorizado
-	return res, nil
+	u := masReciente(rechazos)
+	res.Estado, res.Autorizacion, res.Mensajes = EstadoNoAutorizado, u.Autorizacion, u.Mensajes
+	return nil
+}
+
+// masReciente devuelve la autorización de fecha más reciente. Si alguna
+// fecha no se puede leer, o hay empate, devuelve la última de la lista.
+func masReciente(vs []vinculada) vinculada {
+	mejor := vs[len(vs)-1]
+	t, err := mejor.Fecha()
+	if err != nil {
+		return mejor
+	}
+	for _, v := range vs[:len(vs)-1] {
+		f, err := v.Fecha()
+		if err != nil {
+			return vs[len(vs)-1]
+		}
+		if f.After(t) {
+			mejor, t = v, f
+		}
+	}
+	return mejor
 }
 
 // coherente comprueba que la respuesta de autorización corresponda a la
@@ -631,9 +805,9 @@ func recibidoAhora(rec *ws.RespuestaRecepcion) bool {
 	return true
 }
 
-// esperarAutorizacion consulta hasta obtener un resultado. Si ajeno no es
-// nil, un resultado para el que devuelve true se trata como pendiente.
-func (c *Cliente) esperarAutorizacion(ctx context.Context, claveAcceso string, ajeno func(*Resultado) bool) (*Resultado, error) {
+// esperarAutorizacion consulta hasta obtener un resultado para doc o
+// agotar las consultas configuradas.
+func (c *Cliente) esperarAutorizacion(ctx context.Context, claveAcceso string, doc *documento) (*Resultado, error) {
 	e := c.cfg.Espera
 	if err := c.dormir(ctx, e.Inicial); err != nil {
 		return nil, err
@@ -641,7 +815,7 @@ func (c *Cliente) esperarAutorizacion(ctx context.Context, claveAcceso string, a
 	intervalo := e.Intervalo
 	var ultimo *Resultado
 	for i := 1; ; i++ {
-		res, err := c.Autorizar(ctx, claveAcceso)
+		res, err := c.consultar(ctx, claveAcceso, doc)
 		if err != nil {
 			if res != nil {
 				return res, err
@@ -649,8 +823,7 @@ func (c *Cliente) esperarAutorizacion(ctx context.Context, claveAcceso string, a
 			return ultimo, err
 		}
 		ultimo = res
-		pendiente := res.Pendiente() || (ajeno != nil && ajeno(res))
-		if !pendiente || i >= e.Consultas {
+		if !res.Pendiente() || i >= e.Consultas {
 			return res, nil
 		}
 		if err := c.dormir(ctx, intervalo); err != nil {
