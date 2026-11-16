@@ -240,6 +240,7 @@ func (l *LiquidacionCompra) ValidarCon(op OpcionesValidacion) comprobante.Hallaz
 		v.Errorf("detalles", "requerido", "la liquidación debe tener al menos un detalle")
 	}
 	sumaLineas, sumaDesc := factura.ValidarDetalles(v, l.Detalles, decimales)
+	factura.VigenciaDetalles(v, l.Detalles, info.FechaEmision)
 	v.Numero(p+"totalSinImpuestos", info.TotalSinImpuestos, 14, 2)
 	v.Numero(p+"totalDescuento", info.TotalDescuento, 14, 2)
 	v.Numero(p+"importeTotal", info.ImporteTotal, 14, 2)

@@ -7,6 +7,7 @@ El SDK incluye copias de datos que el SRI cambia sin previo aviso. **Deben revis
 | **Porcentajes de retención de renta** | `retencion/catalogo_renta.go` (generado) | Catálogo ATS, hoja «TABLAS RETENCIONES», tabla 3.10 | Vigente desde `retencion.CatalogoRentaVigencia`; descargado en `retencion.CatalogoRentaDescarga` |
 | Porcentajes de retención de IVA | `retencion.PorcentajesIVA` | Ficha técnica, Tabla 20 | Ficha v2.34 |
 | Tarifas de IVA | `comprobante.TarifasIVA` | Ficha técnica, Tabla 17 | Ficha v2.34 |
+| Vigencia de las tarifas generales de IVA (12 %, 14 %, 15 %) | `comprobante/vigencia.go` | Leyes que fijan la tarifa (citadas en el archivo); la ficha no publica fechas | Hasta la tarifa del 15 % (desde 2024-04-01). Un decreto que cambie la tarifa general exige actualizarla: mientras tanto el SDK solo da advertencias equivocadas, nunca errores |
 | Formas de pago | `comprobante.FormasPago` | Ficha técnica, Tabla 24 | Ficha v2.34 |
 | Códigos de país | `comprobante.Paises` (generado desde el texto de la ficha) | Ficha técnica, Tabla 25 (Catálogo ATS) | Ficha v2.34, 259 códigos |
 | Combustibles y códigos de transporte | `factura.Combustibles`, `factura.CodAuxTransporte*` | Ficha técnica, Tablas 30 y 32 | Ficha v2.34 |
