@@ -17,6 +17,8 @@ El SDK incluye copias de datos que el SRI cambia sin previo aviso. **Deben revis
 
 Los porcentajes de retención de ISD y las tarifas de ICE no están en el SDK.
 
+Las variables exportadas de esta tabla (`TarifasIVA`, `FormasPago`, `Paises`, `PorcentajesIVA`) son copias de consulta: el SDK valida contra una copia privada tomada al iniciar el programa (`comprobante.TarifaIVADe`, `FormaPagoDe`, `PaisDe`). Modificarlas en ejecución no actualiza el catálogo; hay que cambiar el código fuente y publicar una versión.
+
 ## Catálogo de retenciones de renta (el que más cambia)
 
 El SRI publicó tres versiones de esta tabla solo entre marzo y agosto de 2026. Por eso:

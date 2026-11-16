@@ -267,7 +267,7 @@ func (v *Validador) Pagos(campo string, pagos []Pago, importe decimal.Decimal, o
 	suma := decimal.Cero
 	for i, pg := range pagos {
 		p := fmt.Sprintf("%s[%d].", campo, i)
-		switch _, enTabla := FormasPago[pg.FormaPago]; {
+		switch _, enTabla := formasPago[pg.FormaPago]; {
 		case !formaPagoXSD(pg.FormaPago):
 			v.Errorf(p+"formaPago", "catalogo", "código %q inválido (Tabla 24)", pg.FormaPago)
 		case !enTabla:
@@ -289,7 +289,7 @@ func (v *Validador) Pais(campo, codigo string) {
 	if codigo == "" || !v.Digitos(campo, codigo, 3) {
 		return
 	}
-	if _, ok := Paises[codigo]; !ok {
+	if _, ok := paises[codigo]; !ok {
 		v.Advertirf(campo, "pais.catalogo", "el código %s no figura en la Tabla 25; el SRI usa los códigos de país del Catálogo ATS, no los de ISO 3166, y rechaza los desconocidos (error 52)", codigo)
 	}
 }

@@ -146,7 +146,7 @@ func (n *NotaDebito) Calcular() {
 		}
 		imp.BaseImponible = imp.BaseImponible.Redondear(2)
 		if imp.Codigo == comprobante.ImpuestoIVA {
-			if t, ok := comprobante.TarifasIVA[imp.CodigoPorcentaje]; ok && t.Fija {
+			if t, ok := comprobante.TarifaIVADe(imp.CodigoPorcentaje); ok && t.Fija {
 				imp.Tarifa = t.Tarifa
 			}
 			imp.Valor = imp.BaseImponible.Porcentaje(imp.Tarifa)
@@ -276,7 +276,7 @@ func (n *NotaDebito) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 	sumaPagos := decimal.Cero
 	for i, pg := range info.Pagos {
 		q := fmt.Sprintf("%spagos[%d].", p, i)
-		switch _, enTabla := comprobante.FormasPago[pg.FormaPago]; {
+		switch _, enTabla := comprobante.FormaPagoDe(pg.FormaPago); {
 		case !reFormaPagoXSD.MatchString(pg.FormaPago):
 			v.Errorf(q+"formaPago", "catalogo", "código %q inválido (Tabla 24)", pg.FormaPago)
 		case !enTabla:

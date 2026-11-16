@@ -45,7 +45,7 @@ func CalcularImpuestos(total decimal.Decimal, impuestos []Impuesto) {
 		if imp.Codigo != ImpuestoIVA {
 			continue
 		}
-		if t, ok := TarifasIVA[imp.CodigoPorcentaje]; ok && t.Fija {
+		if t, ok := tarifasIVA[imp.CodigoPorcentaje]; ok && t.Fija {
 			imp.Tarifa = t.Tarifa
 		}
 		imp.BaseImponible = total.Sumar(ice).Redondear(2)
@@ -129,7 +129,7 @@ func (v *Validador) ImpuestoLinea(p string, imp Impuesto) {
 	}
 	switch imp.Codigo {
 	case ImpuestoIVA:
-		t, ok := TarifasIVA[imp.CodigoPorcentaje]
+		t, ok := tarifasIVA[imp.CodigoPorcentaje]
 		if !ok {
 			v.Errorf(p+"codigoPorcentaje", "catalogo", "código de IVA %q desconocido (Tabla 17)", imp.CodigoPorcentaje)
 			return
