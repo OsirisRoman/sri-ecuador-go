@@ -114,7 +114,7 @@ func (n *NotaCredito) XML() ([]byte, error) {
 // Parse lee una nota de crédito desde su XML, firmado o no.
 func Parse(doc []byte) (*NotaCredito, error) {
 	var n NotaCredito
-	if err := xml.Unmarshal(doc, &n); err != nil {
+	if err := comprobante.Deserializar(doc, &n); err != nil {
 		return nil, fmt.Errorf("notacredito: XML ilegible: %w", err)
 	}
 	return &n, nil

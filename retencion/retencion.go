@@ -239,7 +239,7 @@ func (c *ComprobanteRetencion) XML() ([]byte, error) {
 // Parse lee un comprobante de retención v2.0.0 desde su XML, firmado o no.
 func Parse(doc []byte) (*ComprobanteRetencion, error) {
 	var c ComprobanteRetencion
-	if err := xml.Unmarshal(doc, &c); err != nil {
+	if err := comprobante.Deserializar(doc, &c); err != nil {
 		return nil, fmt.Errorf("retencion: XML ilegible: %w", err)
 	}
 	return &c, nil
