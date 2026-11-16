@@ -17,7 +17,7 @@ Mientras el proyecto esté en versiones 0.x, las correcciones de seguridad se pu
 El SDK:
 
 - No escribe la clave privada ni la contraseña del certificado en registros ni en mensajes de error.
-- Rechaza documentos XML con DOCTYPE y limita su tamaño y profundidad.
+- Rechaza documentos XML con DOCTYPE y limita su tamaño (8 MB) y profundidad (128 niveles). Analizar, canonicalizar y verificar cuesta un tiempo proporcional al tamaño del documento, también si es hostil: una firma admite como máximo 16 referencias y 16 certificados.
 - Exige indicar el ambiente y se niega a enviar un comprobante de un ambiente por el cliente de otro.
 - Exige TLS en el envío de correo fuera de `localhost`.
 - Lee los comprobantes (`Parse`) con el mismo analizador que verifica las firmas, que además rechaza atributos repetidos y normaliza los atributos como libxml2, para que lo que se lee sea lo que se verificó.

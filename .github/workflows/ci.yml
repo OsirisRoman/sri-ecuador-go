@@ -64,3 +64,4 @@ jobs:
         run: |
           go test -run='^$' -fuzz=FuzzC14NIdempotente -fuzztime=30s ./internal/xmldom
           go test -run='^$' -fuzz=FuzzNormalizacionDeAtributos -fuzztime=30s ./internal/xmldom
+          go test -run='^$' -fuzz=FuzzCanonicalizacionIgualQueLaReferencia -fuzztime=30s ./internal/xmldom

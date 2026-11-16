@@ -15,6 +15,16 @@ import (
 
 // Errores de verificación. Todos los fallos de Verificar envuelven uno de
 // estos valores, de modo que errors.Is permite distinguir la causa.
+// Límites de una firma que se verifica. Cada referencia obliga a
+// canonicalizar y resumir el contenido al que apunta, y cada certificado a
+// probar una verificación RSA: sin límite, un documento hostil de pocos
+// megabytes ocuparía horas de CPU. Una firma del SRI lleva 3 referencias
+// (comprobante, SignedProperties y KeyInfo) y la cadena de un certificado.
+const (
+	MaxReferencias  = 16
+	MaxCertificados = 16
+)
+
 var (
 	// ErrSinFirma indica que el documento no contiene ds:Signature.
 	ErrSinFirma = errors.New("xades: el documento no contiene una firma")
@@ -163,6 +173,9 @@ func Verificar(xmlDoc []byte, op *OpcionesVerificacion) (*Firma, error) {
 			if !xc.Es(NSDS, "X509Certificate") {
 				continue
 			}
+			if len(certs) == MaxCertificados {
+				return nil, fmt.Errorf("%w: KeyInfo contiene más de %d certificados", ErrEstructura, MaxCertificados)
+			}
 			der, err := decodificarB64(xc.TextoPlano())
 			if err != nil {
 				return nil, fmt.Errorf("%w: X509Certificate no es base64", ErrCertificadoFirma)
@@ -206,7 +219,9 @@ func Verificar(xmlDoc []byte, op *OpcionesVerificacion) (*Firma, error) {
 		if !ref.Es(NSDS, "Reference") {
 			continue
 		}
-		nRefs++
+		if nRefs++; nRefs > MaxReferencias {
+			return nil, fmt.Errorf("%w: SignedInfo contiene más de %d referencias", ErrEstructura, MaxReferencias)
+		}
 		uri, tieneURI := ref.Attr("URI")
 		tipo, _ := ref.Attr("Type")
 		var destino *xmldom.Elemento
