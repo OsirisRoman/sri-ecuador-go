@@ -98,7 +98,7 @@ Antes de enviar, `Preparar` puede devolver `*sri.ErrorValidacion`: el comprobant
 7. **No modifique el XML después de firmarlo**, ni lo reformatee, ni le añada espacios: invalida la firma (error 39).
 8. **Los textos no llevan saltos de línea ni espacios al inicio o al final.** El SDK lo valida; limpie los datos de entrada.
 9. **El ambiente es explícito.** `comprobante.Pruebas` y `comprobante.Produccion` van en `Config.Ambiente` y en `InfoTributaria.Ambiente`, y deben coincidir; si no, el cliente devuelve `sri.ErrAmbiente`. Use configuración distinta por entorno y no comparta secuenciales entre ambientes.
-10. **El RIDE se genera solo de comprobantes autorizados**: pase a `ride.Generar` el resultado de `res.XMLAutorizado()`.
+10. **El RIDE se genera solo de comprobantes autorizados**: pase a `ride.Generar` el resultado de `res.XMLAutorizado()`. Un RIDE generado sin la envoltura de autorización y sin `Opciones.FechaAutorizacion` se marca como «VISTA PREVIA: SIN VALIDEZ TRIBUTARIA».
 11. **No use `valorDevolucionIva`.** La devolución automática de IVA no está implementada: el SDK rechaza un valor mayor que cero porque no lo descuenta del importe total.
 12. **Secretos fuera del código.** La contraseña del `.p12` y las credenciales SMTP vienen del entorno o de un gestor de secretos; el `.p12` no se sube al repositorio. El SDK no escribe la clave privada en registros.
 

@@ -8,8 +8,9 @@
 // sri.Resultado.XMLAutorizado, que incluye el número y la fecha de
 // autorización, y Generar se negará si su estado no es AUTORIZADO. También
 // se acepta el XML del comprobante sin envoltura (por ejemplo, para una
-// vista previa); en ese caso no figura la fecha de autorización y es
-// responsabilidad de quien llama no entregarlo como comprobante válido.
+// vista previa); si además no se indica Opciones.FechaAutorizacion, el RIDE
+// se marca «SIN AUTORIZACIÓN DEL SRI» y «VISTA PREVIA: SIN VALIDEZ
+// TRIBUTARIA», para que no se confunda con el de un comprobante válido.
 //
 // El PDF se escribe con un generador propio, sin dependencias externas:
 // tamaño A4, fuentes base Helvetica (no se incrustan fuentes), código de
@@ -47,6 +48,12 @@ type Opciones struct {
 	// NumeroAutorizacion y FechaAutorizacion se usan cuando el documento no
 	// trae la envoltura <autorizacion>. En el esquema offline el número de
 	// autorización es la clave de acceso, que es el valor por defecto.
+	//
+	// Sin envoltura AUTORIZADO y sin FechaAutorizacion, el RIDE se marca
+	// como vista previa: en el recuadro de autorización dice «SIN
+	// AUTORIZACIÓN DEL SRI» y «VISTA PREVIA: SIN VALIDEZ TRIBUTARIA». Para
+	// el RIDE de un comprobante autorizado que se guardó sin la envoltura,
+	// indique aquí la fecha de autorización que devolvió el SRI.
 	NumeroAutorizacion string
 	FechaAutorizacion  string
 	// SinCodigoBarras omite el código de barras de la clave de acceso, que
@@ -74,6 +81,9 @@ type modelo struct {
 	pagos                            []comprobante.Pago
 	totales                          []par
 	numAutorizacion, fechaAutorizado string
+	// autorizado indica que el documento vino envuelto en una autorización
+	// AUTORIZADO; vistaPrevia, que nada indica que el SRI lo autorizó.
+	autorizado, vistaPrevia bool
 	// nombre es el tipo en minúsculas («Nota de crédito») y receptor, a
 	// quién va dirigido; los usa Resumir.
 	nombre, receptor string
@@ -98,6 +108,9 @@ func Generar(doc []byte, op *Opciones) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Sin la envoltura AUTORIZADO ni una fecha de autorización dada por la
+	// aplicación, nada indica que el SRI lo haya autorizado.
+	m.vistaPrevia = !m.autorizado && strings.TrimSpace(op.FechaAutorizacion) == ""
 	if m.numAutorizacion == "" {
 		m.numAutorizacion = op.NumeroAutorizacion
 	}
@@ -256,6 +269,7 @@ func Resumir(doc []byte) (Resumen, error) {
 // modelo del RIDE.
 func leer(doc []byte) (*modelo, error) {
 	var numAut, fechaAut string
+	autorizado := false
 	if raiz(doc) == "autorizacion" {
 		var e envoltura
 		if err := xml.Unmarshal(doc, &e); err != nil {
@@ -266,6 +280,7 @@ func leer(doc []byte) (*modelo, error) {
 		}
 		doc = []byte(strings.TrimSpace(e.Comprobante))
 		numAut, fechaAut = strings.TrimSpace(e.NumeroAutorizacion), strings.TrimSpace(e.FechaAutorizacion)
+		autorizado = true
 	}
 	tipo, version, err := esquema.Identificar(doc)
 	if err != nil {
@@ -295,7 +310,7 @@ func leer(doc []byte) (*modelo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ride: %w", err)
 	}
-	m.numAutorizacion, m.fechaAutorizado = numAut, fechaLegible(fechaAut)
+	m.numAutorizacion, m.fechaAutorizado, m.autorizado = numAut, fechaLegible(fechaAut), autorizado
 	return m, nil
 }
 
@@ -326,6 +341,9 @@ func raiz(doc []byte) string {
 func (m *modelo) dibujar(logo *logotipo, barras bool) []byte {
 	d := pdf.Nuevo()
 	d.Titulo = fmt.Sprintf("%s %s", m.titulo, m.it.NumeroComprobante())
+	if m.vistaPrevia {
+		d.Titulo = "VISTA PREVIA SIN VALIDEZ - " + d.Titulo
+	}
 	d.Autor = m.it.RazonSocial
 	l := &lienzo{d: d, y: margen}
 	m.cabecera(l, logo, barras)
@@ -388,7 +406,20 @@ func (m *modelo) cabecera(l *lienzo, logo *logotipo, barras bool) {
 		y += l.parrafo(dibujar, x, y, w, m.titulo, pdf.Negrita, 14, izquierda) + 7
 		y += l.parRotulado(dibujar, x, y, w, par{"No.", m.it.NumeroComprobante()}, 11) + 9
 		y += l.parrafo(dibujar, x, y, w, "NÚMERO DE AUTORIZACIÓN", pdf.Normal, 10, izquierda) + 1
-		y += l.parrafo(dibujar, x, y, w, m.numAutorizacion, pdf.Normal, 8.5, izquierda) + 8
+		if m.vistaPrevia {
+			// AUD-013: un RIDE de algo que el SRI no autorizó no debe
+			// parecerse a uno válido.
+			if dibujar {
+				l.d.Color(0.8, 0, 0)
+			}
+			y += l.parrafo(dibujar, x, y, w, "SIN AUTORIZACIÓN DEL SRI", pdf.Negrita, 10, izquierda) + 4
+			y += l.parrafo(dibujar, x, y, w, "VISTA PREVIA: SIN VALIDEZ TRIBUTARIA", pdf.Negrita, 9, izquierda) + 8
+			if dibujar {
+				l.d.Negro()
+			}
+		} else {
+			y += l.parrafo(dibujar, x, y, w, m.numAutorizacion, pdf.Normal, 8.5, izquierda) + 8
+		}
 		if m.fechaAutorizado != "" {
 			y += l.parRotulado(dibujar, x, y, w, par{"FECHA Y HORA DE AUTORIZACIÓN", m.fechaAutorizado}, 8.5) + 8
 		}
