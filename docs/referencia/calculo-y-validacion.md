@@ -80,6 +80,8 @@ Este SDK aplica dos niveles antes de firmar: el **XSD oficial** (forma) y **regl
 | `combustible.placa`, `transporte.placa`, `placa.formato` (advertencias) | Placa del vehículo | Anexos 12, 16 y 25 |
 | `retencion.porcentaje`, `retencion.valor` | Porcentaje de retención de IVA y valor retenido | Tabla 20 |
 | `retencion.codigo-renta`, `retencion.porcentaje-renta` (advertencias, o errores en modo estricto) | Código y porcentaje de retención de renta | Catálogo ATS; código 52 |
+| `retencion.base-iva`, `retencion.base-renta`, `sustento.base-iva` (advertencias, o errores con `SustentoEstricto`) | Bases de retención que suman más que el IVA o que el valor sin IVA del documento de sustento (detecta también retenciones duplicadas); bases de IVA del sustento mayores que su total más el ICE | Coherencia con el documento de sustento |
+| `origen.documento`, `origen.valor`, `origen.base`, `origen.impuesto`, `origen.cantidad`, `origen.detalle` (advertencia) | Nota de crédito contrastada con la factura que modifica y con las notas de crédito anteriores: referencia, valor, bases, impuestos y cantidades devueltas. Solo si la factura se conoce (`DesdeFactura`, `AsociarFactura` o `ValidarContra`) | Coherencia con el documento modificado |
 | `periodo` (advertencia) | Período fiscal distinto del mes de emisión | Coherencia |
 | `sustento.incompleto` (advertencia), `cantidad.cero` (advertencia) | Guía de remisión | Coherencia |
 | `devolucion-iva.no-admitida` | `valorDevolucionIva` mayor que cero | Limitación de este SDK |
