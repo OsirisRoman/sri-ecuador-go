@@ -357,11 +357,18 @@ func DeclararPreciosFinales(detalles []Detalle) {
 // a dar ese contexto:
 //
 //   - Asignar a cada Detalle.PrecioFinal el precio que consta en sus propios
-//     registros: Validar comprueba entonces la factura contra ese precio.
-//   - Llamar a este método: Validar comprueba que cada línea sea la
-//     descomposición exacta de su propio importe (base = importe / (1 +
-//     tarifa), redondeado), que es lo más que se puede saber sin el precio
-//     original.
+//     registros (el contrato, la lista de precios): Validar comprueba
+//     entonces la factura contra ese precio. Si la aplicación conserva el
+//     precio pactado, debe usar esta forma: la información original
+//     prevalece sobre cualquier reconstrucción.
+//   - Llamar a este método, cuando no se conserva el precio. No recupera el
+//     precio original: lo reconstruye a partir del propio XML. Validar solo
+//     puede comprobar entonces que cada línea sea la descomposición exacta
+//     de su propio importe (base = importe / (1 + tarifa), redondeado), no
+//     que coincida con lo pactado.
+//
+// El SDK no llama nunca a este método por su cuenta: ni Parse, ni Validar,
+// ni DesdeFactura declaran precios finales que la aplicación no haya pedido.
 //
 // No afecta a los detalles con ICE o IRBPNR, que no admiten el modo.
 func (f *Factura) DeclararPreciosFinales() { DeclararPreciosFinales(f.Detalles) }

@@ -5,7 +5,7 @@ Este documento orienta a quien revise el SDK sin contexto previo: qué hay, cóm
 ## Objeto
 
 - **Versión publicada anterior:** `v0.1.0` (commit `395b6d0`), auditada ya una vez; resultados en [`auditoria-v0.1.0.md`](auditoria-v0.1.0.md).
-- **Candidata a 0.2.0:** la rama `main` en el commit indicado por quien encarga la revisión. No hay etiqueta `v0.2.0` todavía. `git diff v0.1.0..main` muestra todo lo que cambió; los cambios de cada hallazgo están enlazados por commit en `auditoria-v0.1.0.md`.
+- **Versión 0.2.0:** la etiqueta `v0.2.0`, auditada por segunda vez cuando era candidata (commit `4492c75`); resultados en [`auditoria-v0.2.0.md`](auditoria-v0.2.0.md). `git diff v0.1.0..v0.2.0` muestra todo lo que cambió; los cambios de cada hallazgo están enlazados por commit en `auditoria-v0.1.0.md`.
 
 ## Reproducir
 

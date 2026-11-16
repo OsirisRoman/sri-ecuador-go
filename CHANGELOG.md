@@ -2,13 +2,11 @@
 
 Los cambios notables de cada versión. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y las versiones, [SemVer](https://semver.org/lang/es/), según la [política de versiones](docs/versionado.md). Mientras la versión sea 0.x, la API puede cambiar entre versiones menores.
 
-## Sin publicar
-
-- Documentación: política de versiones (`docs/versionado.md`).
-
-## v0.2.0 — sin publicar
+## v0.2.0 — pre-release — 2026-11-16
 
 Corrige los hallazgos de dos auditorías adversariales independientes: la de la v0.1.0 y la de la candidata a esta versión. El detalle de cada hallazgo, la prueba que lo protege y lo que sigue abierto están en [`docs/auditoria-v0.1.0.md`](docs/auditoria-v0.1.0.md) y [`docs/auditoria-v0.2.0.md`](docs/auditoria-v0.2.0.md). Sigue basada en la ficha técnica v2.34.
+
+Requiere Go 1.26 o superior. Para actualizar desde la v0.1.0: `go get github.com/OsirisRoman/sri-ecuador-go@v0.2.0`. El código que compila con la v0.1.0 compila con esta versión (no cambia ninguna firma); lo que cambia es el comportamiento descrito abajo. Como la v0.1.0, es una versión previa a la 1.0, probada solo contra el ambiente de pruebas del SRI.
 
 ### Cambios incompatibles
 
@@ -37,6 +35,7 @@ Comprobantes que la v0.1.0 firmaba ahora se rechazan o cambian de estado. Las re
 - `comprobante.ImporteRedondeado`, `Validador.ImpuestosDetalle`, `Validador.VigenciaIVA`, `IVAVigente`, `CaracterInvalido`, `Deserializar`, `TarifaIVADe`, `FormaPagoDe`, `PaisDe`; `factura.VigenciaDetalles`; `certificado.Certificado.Utilizable`; `ws.Autorizacion.NoAutorizado`.
 - **Precio final con IVA incluido** (decisión D18): `factura.LineaPrecioFinal`, `Detalle.PrecioFinal` y `DeclararPreciosFinales` en factura, liquidación de compra y nota de crédito. La aplicación declara el precio que paga el comprador y `Calcular` deduce la base, el IVA y el precio unitario, de modo que el comprobante suma exactamente ese precio (12,00 al 15 %: 10,43 + 1,57). `Validar` contrasta cada detalle con su precio declarado (`precio-final.importe`, `precio-final.base`, `precio-final.impuestos`, `precio-final.total`); los detalles que no lo declaran siguen como antes. Nuevas `comprobante.DescomponerPrecioFinal`, `CalcularPrecioFinal`, `AdmitePrecioFinal`, `PrecioFinalDeclarado`, `Validador.ImpuestosDetallePrecioFinal`, `Validador.TotalesPrecioFinal`, `GrupoImpuesto.ValorCon`, `factura.CalcularDetalle`, `factura.ImpuestosFinales`, `factura.DecimalesDePrecio` y `decimal.Decimal.Cociente`. Advertencia `origen.precio-final`. Vectores en `vectores/precio-final.json`.
 - `comprobante.RecalcularImpuestos`, `comprobante.AsignarPagoUnico` y `Validador.Compensaciones`.
+- Documentación: política de versiones (`docs/versionado.md`) y resolución de las dos auditorías (`docs/auditoria-v0.1.0.md`, `docs/auditoria-v0.2.0.md`).
 - CI: `govulncheck` y `go mod verify` (también semanal), contraste con `xmlsec1` y `xmllint` (`internal/interop`), fuzzing breve del analizador XML y acciones fijadas por SHA.
 
 ### Corregido
