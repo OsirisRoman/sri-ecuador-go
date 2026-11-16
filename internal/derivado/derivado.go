@@ -75,3 +75,11 @@ func (m *Marca) Aplicar(anterior, total, tarifa decimal.Decimal, base, valor *de
 	*valor = valor.Redondear(2)
 	*m = Marca{visto: true, base: sigueBase, b: *base, valor: sigueValor, v: *valor}
 }
+
+// Deducido anota lo que Calcular dedujo de un impuesto cuyo valor se
+// deduce siempre (el IVA): el valor y, si baseDeducida, también la base.
+// Así, si la aplicación convierte después ese impuesto en un ICE o un
+// IRBPNR, sus importes no se toman por indicados.
+func (m *Marca) Deducido(base, valor decimal.Decimal, baseDeducida bool) {
+	*m = Marca{visto: true, base: baseDeducida, b: base, valor: true, v: valor}
+}
