@@ -253,7 +253,12 @@ func (n *NotaDebito) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 	if len(info.Impuestos) == 0 {
 		v.Errorf(p+"impuestos", "requerido", "debe declarar al menos un impuesto (use IVA 0 %% si no grava)")
 	}
-	esperado, bases := info.TotalSinImpuestos, decimal.Cero
+	esperado, bases, ice := info.TotalSinImpuestos, decimal.Cero, decimal.Cero
+	for _, imp := range info.Impuestos {
+		if imp.Codigo == comprobante.ImpuestoICE {
+			ice = ice.Sumar(imp.Valor)
+		}
+	}
 	for i, imp := range info.Impuestos {
 		v.ImpuestoLinea(fmt.Sprintf("%simpuestos[%d].", p, i), imp.comun())
 		v.DevolucionIVA(fmt.Sprintf("%simpuestos[%d].valorDevolucionIva", p, i), imp.ValorDevolucionIva)
@@ -262,8 +267,15 @@ func (n *NotaDebito) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 			bases = bases.Sumar(imp.BaseImponible)
 		}
 	}
-	if bases.Cmp(info.TotalSinImpuestos) > 0 {
-		v.Errorf(p+"impuestos", "totales.base", "las bases de IVA suman %s, más que el total sin impuestos (%s)", bases.Redondear(2), info.TotalSinImpuestos)
+	// La base del IVA es el total sin impuestos más el ICE (Tabla 18; art. 58
+	// de la LRTI). Varios motivos pueden gravar tarifas distintas, de modo que
+	// las bases se reparten entre varios IVA, pero no pueden sumar más; si
+	// suman menos, parte del valor quedó sin tarifa de IVA declarada.
+	switch baseIVA := info.TotalSinImpuestos.Sumar(ice); {
+	case bases.Cmp(baseIVA) > 0:
+		v.Errorf(p+"impuestos", "totales.base", "las bases de IVA suman %s, más que el total sin impuestos más el ICE (%s)", bases.Redondear(2), baseIVA.Redondear(2))
+	case len(info.Impuestos) > 0 && bases.Cmp(baseIVA) < 0:
+		v.Advertirf(p+"impuestos", "iva.base", "las bases de IVA suman %s y el total sin impuestos más el ICE es %s; lo que no grava IVA se declara con tarifa 0 %%, no objeto (6) o exento (7)", bases.Redondear(2), baseIVA.Redondear(2))
 	}
 	for _, c := range info.Compensaciones {
 		esperado = esperado.Restar(c.Valor)

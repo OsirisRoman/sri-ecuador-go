@@ -117,8 +117,9 @@ func (v *Validador) Advertirf(campo, regla, formato string, args ...any) {
 func (v *Validador) Hallazgos() Hallazgos { return v.hs }
 
 // Texto valida un campo alfanumérico: obligatoriedad, longitud máxima en
-// caracteres y las dos causas de rechazo de esquema que la ficha técnica
-// destaca en el Anexo 1: saltos de línea y espacios sobrantes.
+// caracteres, caracteres representables en XML y las dos causas de rechazo
+// de esquema que la ficha técnica destaca en el Anexo 1: saltos de línea y
+// espacios sobrantes.
 func (v *Validador) Texto(campo, valor string, obligatorio bool, max int) {
 	if valor == "" {
 		if obligatorio {

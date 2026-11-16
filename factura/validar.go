@@ -180,9 +180,7 @@ func ValidarDetalles(v *comprobante.Validador, detalles []Detalle, decimales int
 		if len(d.Impuestos) == 0 {
 			v.Errorf(p+"impuestos", "requerido", "cada detalle debe declarar al menos un impuesto (use IVA 0%%, no objeto o exento si no grava)")
 		}
-		for j, imp := range d.Impuestos {
-			v.ImpuestoLinea(fmt.Sprintf("%simpuestos[%d].", p, j), imp)
-		}
+		v.ImpuestosDetalle(p, d.PrecioTotalSinImpuesto, d.Impuestos)
 		sumaLineas = sumaLineas.Sumar(d.PrecioTotalSinImpuesto)
 		sumaDescuentos = sumaDescuentos.Sumar(d.Descuento)
 	}

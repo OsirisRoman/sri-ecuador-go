@@ -315,7 +315,6 @@ var (
 	reDosDigitos   = regexp.MustCompile(`^[0-9]{2}$`)
 	rePais         = regexp.MustCompile(`^[0-9]{3,4}$`)
 	reFormaPagoXSD = regexp.MustCompile(`^(0[1-9]|1[0-9]|2[01])$`)
-	tolerancia     = decimal.MustParse("0.01")
 )
 
 // OpcionesValidacion ajusta ValidarCon.
@@ -449,8 +448,8 @@ func (c *ComprobanteRetencion) ValidarCon(op OpcionesValidacion) comprobante.Hal
 				} else if t.Fija && !imp.Tarifa.Igual(t.Tarifa) {
 					v.Errorf(r+"tarifa", "iva.tarifa", "el código %s corresponde a %s; la tarifa declarada es %s", t.Codigo, t.Descripcion, imp.Tarifa)
 				}
-				if calc := imp.BaseImponible.Porcentaje(imp.Tarifa).Redondear(2); imp.ValorImpuesto.Restar(calc).Abs().Cmp(tolerancia) > 0 {
-					v.Errorf(r+"valorImpuesto", "iva.valor", "es %s pero base × tarifa = %s", imp.ValorImpuesto, calc)
+				if exacto := imp.BaseImponible.Porcentaje(imp.Tarifa); !comprobante.ImporteRedondeado(imp.ValorImpuesto, exacto) {
+					v.Errorf(r+"valorImpuesto", "iva.valor", "es %s pero base × tarifa = %s", imp.ValorImpuesto, exacto.Redondear(2))
 				}
 			case comprobante.ImpuestoICE, comprobante.ImpuestoIRBPNR:
 			default:
@@ -556,7 +555,7 @@ func validarRetencion(v *comprobante.Validador, r, codigo, codigoRetencion strin
 	v.Numero(r+"baseImponible", base, 14, 2)
 	v.Numero(r+"porcentajeRetener", porcentaje, 3, 2)
 	v.Numero(r+"valorRetenido", valor, 14, 2)
-	if calc := base.Porcentaje(porcentaje).Redondear(2); valor.Restar(calc).Abs().Cmp(tolerancia) > 0 {
-		v.Errorf(r+"valorRetenido", "retencion.valor", "es %s pero base × porcentaje = %s", valor, calc)
+	if exacto := base.Porcentaje(porcentaje); !comprobante.ImporteRedondeado(valor, exacto) {
+		v.Errorf(r+"valorRetenido", "retencion.valor", "es %s pero base × porcentaje = %s", valor, exacto.Redondear(2))
 	}
 }
