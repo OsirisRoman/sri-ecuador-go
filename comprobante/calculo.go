@@ -164,7 +164,12 @@ func (v *Validador) Numero(campo string, d decimal.Decimal, totalDigitos, decima
 
 // ImpuestoLinea valida un <impuesto> de un detalle; p es el prefijo del
 // campo, terminado en punto.
-func (v *Validador) ImpuestoLinea(p string, imp Impuesto) {
+func (v *Validador) ImpuestoLinea(p string, imp Impuesto) { v.impuestoLinea(p, imp, true) }
+
+// impuestoLinea es ImpuestoLinea; conValor indica si se contrasta el valor
+// del IVA con base × tarifa (iva.valor). No se hace en un detalle definido
+// por su precio final, que se contrasta con ese precio.
+func (v *Validador) impuestoLinea(p string, imp Impuesto, conValor bool) {
 	v.Numero(p+"tarifa", imp.Tarifa, 4, 2)
 	v.Numero(p+"baseImponible", imp.BaseImponible, 14, 2)
 	v.Numero(p+"valor", imp.Valor, 14, 2)
@@ -181,7 +186,7 @@ func (v *Validador) ImpuestoLinea(p string, imp Impuesto) {
 		if t.Fija && !imp.Tarifa.Igual(t.Tarifa) {
 			v.Errorf(p+"tarifa", "iva.tarifa", "el código %s corresponde a %s; la tarifa declarada es %s", t.Codigo, t.Descripcion, imp.Tarifa)
 		}
-		if exacto := imp.BaseImponible.Porcentaje(imp.Tarifa); !ImporteRedondeado(imp.Valor, exacto) {
+		if exacto := imp.BaseImponible.Porcentaje(imp.Tarifa); conValor && !ImporteRedondeado(imp.Valor, exacto) {
 			v.Errorf(p+"valor", "iva.valor", "es %s pero base × tarifa = %s", imp.Valor, exacto.Redondear(2))
 		}
 	case ImpuestoICE, ImpuestoIRBPNR:
@@ -210,6 +215,10 @@ func (v *Validador) ImpuestoLinea(p string, imp Impuesto) {
 // No se recalculan la base ni el valor del ICE ni del IRBPNR: dependen de
 // tarifas específicas, del precio de venta al público o de la cantidad.
 func (v *Validador) ImpuestosDetalle(p string, totalLinea decimal.Decimal, impuestos []Impuesto) {
+	v.impuestosDetalle(p, totalLinea, impuestos, true)
+}
+
+func (v *Validador) impuestosDetalle(p string, totalLinea decimal.Decimal, impuestos []Impuesto, conValor bool) {
 	ice := decimal.Cero
 	for _, imp := range impuestos {
 		if imp.Codigo == ImpuestoICE {
@@ -219,7 +228,7 @@ func (v *Validador) ImpuestosDetalle(p string, totalLinea decimal.Decimal, impue
 	nIVA := 0
 	for j, imp := range impuestos {
 		q := fmt.Sprintf("%simpuestos[%d].", p, j)
-		v.ImpuestoLinea(q, imp)
+		v.impuestoLinea(q, imp, conValor)
 		if imp.Codigo != ImpuestoIVA {
 			continue
 		}

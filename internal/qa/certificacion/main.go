@@ -62,7 +62,7 @@ var (
 
 func main() {
 	desde := flag.Int("desde", 0, "primer secuencial de factura libre (obligatorio)")
-	solo := flag.String("solo", "", "pruebas a ejecutar, separadas por comas (T0..T7); por defecto, todas")
+	solo := flag.String("solo", "", "pruebas a ejecutar, separadas por comas (T0..T9); por defecto, todas")
 	flag.BoolVar(&enviarSRI, "enviar", false, "enviar al ambiente de pruebas del SRI (sin esto, solo predicción local)")
 	dir := flag.String("dir", "evidencia-privada", "directorio de evidencias (excluido de Git)")
 	flag.IntVar(&ncSec, "nc", 0, "secuencial de nota de crédito para T7 (nota de crédito 1.0.0)")
@@ -104,6 +104,8 @@ func main() {
 		{"T5", 1, t5CentavoDeMas},
 		{"T6", 0, t6ClaveNoEnviada},
 		{"T7", 0, t7NotaCredito100},
+		{"T8", 1, t8PrecioFinal},
+		{"T9", 1, t9PrecioFinalVariasLineas},
 	}
 	for _, p := range pruebas {
 		if *solo == "" || strings.Contains(","+*solo+",", ","+p.id+",") {
@@ -581,3 +583,76 @@ func sanear(s string) string {
 }
 
 var _ = ws.EstadoAutorizado
+
+// precioFinal emite por el flujo normal (Preparar) una factura cuyos
+// detalles se definen por su precio final con IVA incluido, la consulta
+// hasta tener resultado y comprueba que la factura leída de su XML se valida
+// al declarar de nuevo el modo.
+func precioFinal(id string, sec int, explicacion string, lineas ...factura.Detalle) {
+	f := facturaBase(sec, lineas...)
+	info := f.InfoFactura
+	decir("   %s", explicacion)
+	decir("   calculado: subtotal %s, IVA %s, importe total %s", info.TotalSinImpuestos, info.TotalConImpuestos[0].Valor, info.ImporteTotal)
+	cli := cliente(sri.Espera{Inicial: time.Millisecond, Intervalo: time.Millisecond, Consultas: 1})
+	prep, err := cli.Preparar(f)
+	decir("   local: %s", reglas(f.Validar()))
+	if err != nil {
+		decir("   ABORTADO: %v", err)
+		return
+	}
+	leida, err := factura.Parse(prep.XMLFirmado)
+	if err != nil {
+		decir("   ABORTADO: %v", err)
+		return
+	}
+	sinContexto := reglas(leida.Validar().Errores())
+	leida.DeclararPreciosFinales()
+	decir("   leída de su XML: sin declarar el modo, %s; con DeclararPreciosFinales, %s", sinContexto, reglas(leida.Validar().Errores()))
+	decir("   esperado SDK: Preparar lo admite (precio final declarado)")
+	decir("   hipótesis SRI: AUTORIZADO (autorizó un centavo de diferencia en T5); no comprobado con este cálculo")
+	guardar(id+".firmado.xml", prep.XMLFirmado)
+	if !enviarSRI {
+		return
+	}
+	ctx, cancelar := contexto()
+	defer cancelar()
+	r, err := cli.Enviar(ctx, prep.XMLFirmado)
+	if err != nil {
+		decir("   recepción: %s", clasificar(err))
+		return
+	}
+	decir("   recepción: %q", r.Recepcion.Estado)
+	if r.Estado != sri.EstadoRecibido {
+		informar(id, r, nil)
+		return
+	}
+	for i := 0; i < 8; i++ {
+		res, err := cli.ConsultarDocumento(ctx, prep.XMLFirmado)
+		if err != nil || !res.Pendiente() {
+			decir("   ConsultarDocumento tras %d intento(s):", i+1)
+			informar(id, res, err)
+			return
+		}
+		time.Sleep(4 * time.Second)
+	}
+	decir("   sigue pendiente tras 8 consultas")
+}
+
+// T8: una línea de precio final 12,00 con IVA del 15 %: base 10,43 e IVA
+// 1,57 (el IVA de la base sería 1,5645 → 1,56).
+func t8PrecioFinal(sec int) {
+	decir("\n== T8 precio final con IVA incluido, una línea (factura %d)", sec)
+	precioFinal("T8", sec, "1 × 12,00 de precio final: base 10,43 + IVA 1,57 = 12,00 (sobre la base, el IVA sería 1,56)",
+		factura.LineaPrecioFinal("T8", "Servicio de prueba", d("1"), d("12.00"), comprobante.IVA15))
+}
+
+// T9: diez líneas de precio final 0,50: base 0,43 e IVA 0,07 cada una;
+// totales 4,30 + 0,70 = 5,00 (sobre la base acumulada el IVA sería 0,65).
+func t9PrecioFinalVariasLineas(sec int) {
+	decir("\n== T9 precio final con IVA incluido, diez líneas (factura %d)", sec)
+	var ls []factura.Detalle
+	for i := 1; i <= 10; i++ {
+		ls = append(ls, factura.LineaPrecioFinal(fmt.Sprintf("T9-%02d", i), "Artículo de prueba", d("1"), d("0.50"), comprobante.IVA15))
+	}
+	precioFinal("T9", sec, "10 líneas de 0,50 de precio final: 0,43 + 0,07 cada una; totales 4,30 + 0,70 = 5,00 (sobre la base acumulada, el IVA sería 0,65)", ls...)
+}

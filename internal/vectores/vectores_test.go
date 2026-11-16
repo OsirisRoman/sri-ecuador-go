@@ -254,6 +254,7 @@ func TestGenerar(t *testing.T) {
 	}
 	escribirJSON(t, "clave-acceso.json", casosClave(t))
 	escribirJSON(t, "calculo-factura.json", casosCalculo())
+	escribirJSON(t, "precio-final.json", casosPrecioFinal())
 
 	f := &factura.Factura{
 		InfoTributaria: comprobante.InfoTributaria{Ambiente: comprobante.Pruebas, RazonSocial: "EMISOR FICTICIO S.A.", NombreComercial: "Ñandú & Cía.",
@@ -349,6 +350,100 @@ func TestCalculo(t *testing.T) {
 	b, _ := json.Marshal(casosCalculo())
 	if string(a) != string(b) {
 		t.Errorf("los vectores de cálculo ya no coinciden con el SDK:\n vector: %s\n    SDK: %s", a, b)
+	}
+}
+
+// lineaPrecioFinal es un detalle definido por su precio final con IVA
+// incluido: las entradas y todo lo que se deduce de ellas.
+type lineaPrecioFinal struct {
+	Cantidad    string `json:"cantidad"`
+	PrecioFinal string `json:"precioFinal"`
+	Descuento   string `json:"descuento"`
+	CodigoIVA   string `json:"codigoPorcentajeIVA"`
+	// Resultados.
+	ImporteFinal           string `json:"importeFinal"`
+	Tarifa                 string `json:"tarifa"`
+	BaseImponible          string `json:"baseImponible"`
+	Valor                  string `json:"valor"`
+	PrecioUnitario         string `json:"precioUnitario"`
+	PrecioTotalSinImpuesto string `json:"precioTotalSinImpuesto"`
+	// ValorSobreLaBase es el IVA que daría la misma base definida por su
+	// precio sin impuestos: redondear(base × tarifa / 100, 2).
+	ValorSobreLaBase string `json:"valorSobreLaBase"`
+}
+
+type casoPrecioFinal struct {
+	Descripcion       string             `json:"descripcion"`
+	Lineas            []lineaPrecioFinal `json:"lineas"`
+	TotalSinImpuestos string             `json:"totalSinImpuestos"`
+	TotalConImpuestos []totalCalculo     `json:"totalConImpuestos"`
+	ImporteTotal      string             `json:"importeTotal"`
+}
+
+func casosPrecioFinal() []casoPrecioFinal {
+	diez := func(l lineaPrecioFinal) []lineaPrecioFinal {
+		out := make([]lineaPrecioFinal, 10)
+		for i := range out {
+			out[i] = l
+		}
+		return out
+	}
+	casos := []casoPrecioFinal{
+		{Descripcion: "12,00 al 15 %: ningún precio sin impuestos de 2 decimales da este total", Lineas: []lineaPrecioFinal{{Cantidad: "1", PrecioFinal: "12.00", CodigoIVA: "4"}}},
+		{Descripcion: "35,00 al 15 %", Lineas: []lineaPrecioFinal{{Cantidad: "1", PrecioFinal: "35.00", CodigoIVA: "4"}}},
+		{Descripcion: "0,50 al 15 %", Lineas: []lineaPrecioFinal{{Cantidad: "1", PrecioFinal: "0.50", CodigoIVA: "4"}}},
+		{Descripcion: "350,00 al 15 %: los dos modos coinciden", Lineas: []lineaPrecioFinal{{Cantidad: "1", PrecioFinal: "350.00", CodigoIVA: "4"}}},
+		{Descripcion: "diez líneas de 0,50: el IVA total es la suma de las líneas (0,70), no la tarifa sobre la base acumulada (0,65)", Lineas: diez(lineaPrecioFinal{Cantidad: "1", PrecioFinal: "0.50", CodigoIVA: "4"})},
+		{Descripcion: "cantidad 3: el precio unitario sin impuestos tiene 6 decimales", Lineas: []lineaPrecioFinal{{Cantidad: "3", PrecioFinal: "12.00", CodigoIVA: "4"}}},
+		{Descripcion: "cantidad con decimales: el importe final se redondea primero (24,975 → 24,98)", Lineas: []lineaPrecioFinal{{Cantidad: "2.5", PrecioFinal: "9.99", CodigoIVA: "4"}}},
+		{Descripcion: "con descuento sin impuestos de 5,00: solo cambia el precio unitario", Lineas: []lineaPrecioFinal{{Cantidad: "1", PrecioFinal: "12.00", Descuento: "5.00", CodigoIVA: "4"}}},
+		{Descripcion: "tarifas 5 % y 0 %, y una línea al 15 %", Lineas: []lineaPrecioFinal{
+			{Cantidad: "1", PrecioFinal: "12.00", CodigoIVA: "5"}, {Cantidad: "1", PrecioFinal: "12.00", CodigoIVA: "0"}, {Cantidad: "2", PrecioFinal: "35.00", CodigoIVA: "4"}}},
+	}
+	for i := range casos {
+		c := &casos[i]
+		f := &factura.Factura{}
+		for j := range c.Lineas {
+			l := &c.Lineas[j]
+			d := factura.LineaPrecioFinal("X", "x", decimal.MustParse(l.Cantidad), decimal.MustParse(l.PrecioFinal), l.CodigoIVA)
+			if l.Descuento != "" {
+				d.Descuento = decimal.MustParse(l.Descuento)
+			} else {
+				l.Descuento = "0.00"
+			}
+			f.Detalles = append(f.Detalles, d)
+		}
+		f.Calcular()
+		for j, d := range f.Detalles {
+			l := &c.Lineas[j]
+			imp := d.Impuestos[0]
+			l.ImporteFinal = imp.BaseImponible.Sumar(imp.Valor).String()
+			l.Tarifa, l.BaseImponible, l.Valor = imp.Tarifa.String(), imp.BaseImponible.String(), imp.Valor.String()
+			l.PrecioUnitario, l.PrecioTotalSinImpuesto = d.PrecioUnitario.String(), d.PrecioTotalSinImpuesto.String()
+			l.ValorSobreLaBase = imp.BaseImponible.Porcentaje(imp.Tarifa).Redondear(2).String()
+		}
+		i := f.InfoFactura
+		c.TotalSinImpuestos, c.ImporteTotal = i.TotalSinImpuestos.String(), i.ImporteTotal.String()
+		c.TotalConImpuestos = nil
+		for _, t := range i.TotalConImpuestos {
+			c.TotalConImpuestos = append(c.TotalConImpuestos, totalCalculo{t.CodigoPorcentaje, t.BaseImponible.String(), t.Valor.String()})
+		}
+	}
+	return casos
+}
+
+func TestPrecioFinal(t *testing.T) {
+	if os.Getenv("GENERAR_VECTORES") == "precio-final" {
+		escribirJSON(t, "precio-final.json", casosPrecioFinal())
+	}
+	var guardados []casoPrecioFinal
+	if err := json.Unmarshal(leer(t, "precio-final.json"), &guardados); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := json.Marshal(guardados)
+	b, _ := json.Marshal(casosPrecioFinal())
+	if string(a) != string(b) {
+		t.Errorf("los vectores de precio final ya no coinciden con el SDK:\n vector: %s\n    SDK: %s", a, b)
 	}
 }
 

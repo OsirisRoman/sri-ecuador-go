@@ -23,6 +23,8 @@ func totalLinea(d Detalle) decimal.Decimal {
 // unitario, descuento y códigos de impuesto de cada detalle:
 //
 //   - Detalle: precioTotalSinImpuesto = cantidad × precioUnitario − descuento.
+//     En un detalle definido por su precio final (Detalle.PrecioFinal) se
+//     deduce antes el precio unitario; ver comprobante.CalcularPrecioFinal.
 //   - Impuestos del detalle: para el IVA, la tarifa según la Tabla 17, la
 //     base (el total de la línea más el ICE de la misma línea, que integra
 //     la base del IVA) y el valor. Para ICE e IRBPNR se respetan la base y
@@ -30,6 +32,10 @@ func totalLinea(d Detalle) decimal.Decimal {
 //     y se aplica la tarifa como porcentaje.
 //   - infoFactura: totalSinImpuestos, totalDescuento, totalConImpuestos e
 //     importeTotal (incluye propina, rubros de exportación y de terceros).
+//     El IVA total es la tarifa aplicada a la base acumulada; si algún
+//     detalle se define por su precio final, es la suma del IVA de las
+//     líneas, para que el importe total sea la suma de los importes
+//     finales.
 //   - Reembolsos: si los hay, codDocReembolso (41) y sus tres totales.
 //   - Pagos: un único pago sigue al importe total (ver
 //     comprobante.AsignarPagoUnico).
@@ -47,14 +53,11 @@ func (f *Factura) Calcular() {
 	totalSin, totalDesc := decimal.Cero, decimal.Cero
 	for i := range f.Detalles {
 		d := &f.Detalles[i]
-		d.Descuento = d.Descuento.Redondear(2)
-		anterior := d.PrecioTotalSinImpuesto
-		d.PrecioTotalSinImpuesto = totalLinea(*d)
+		CalcularDetalle(d, DecimalesDePrecio(f.version()))
 		totalSin = totalSin.Sumar(d.PrecioTotalSinImpuesto)
 		totalDesc = totalDesc.Sumar(d.Descuento)
-
-		comprobante.RecalcularImpuestos(anterior, d.PrecioTotalSinImpuesto, d.Impuestos)
 	}
+	finales := ImpuestosFinales(f.Detalles)
 
 	info := &f.InfoFactura
 	info.TotalSinImpuestos = totalSin.Redondear(2)
@@ -76,7 +79,7 @@ func (f *Factura) Calcular() {
 			CodigoPorcentaje: g.CodigoPorcentaje,
 			BaseImponible:    g.Base.Redondear(2),
 			Tarifa:           &tarifa,
-			Valor:            g.Valor(),
+			Valor:            g.ValorCon(finales),
 		}
 		if p, ok := previos[par{g.Codigo, g.CodigoPorcentaje}]; ok {
 			t.DescuentoAdicional = p.DescuentoAdicional

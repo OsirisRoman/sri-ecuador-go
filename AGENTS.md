@@ -15,6 +15,7 @@ Lo esencial, que no debes saltarte:
 - Un comprobante devuelto o no autorizado se corrige y se reenvía con la **misma** clave y el mismo secuencial (ficha 5.10): no vuelvas a llamar a `GenerarClaveAcceso`.
 - Después de cambiar una cantidad, un precio o una tarifa, vuelva a llamar a `Calcular`: recalcula todo lo que dedujo. La base o el valor de un ICE específico y de un IRBPNR los indica y los actualiza la aplicación.
 - Con `Reanudar`, `Emitir` y `ConsultarDocumento`, `sri.EstadoAutorizado` garantiza que el documento autorizado es el enviado (`res.Verificado`). `cliente.Autorizar(clave)` solo informa el estado de la clave. `sri.ErrSinComprobante` es un estado desconocido.
+- Precios: `factura.LineaIVA` recibe el precio **sin** impuestos; si el precio pactado ya incluye el IVA, use `factura.LineaPrecioFinal` (el comprobante suma exactamente ese precio). No convierta a mano un precio final en una base. `PrecioFinal` no viaja en el XML: tras `Parse`, vuelva a indicarlo o llame a `DeclararPreciosFinales()` antes de validar, recalcular o hacer la nota de crédito.
 - `Validar` (y `Preparar`) rechaza importes incoherentes aunque no vengan de `Calcular`; para una nota de crédito, usa `DesdeFactura` o `AsociarFactura` para que se contraste con su factura.
 - El secuencial lo asigna y lo guarda la aplicación, no el SDK.
 - Fecha de emisión con `comprobante.Hoy()` (hora de Ecuador).

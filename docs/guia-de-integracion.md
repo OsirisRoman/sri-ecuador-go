@@ -127,7 +127,7 @@ El RIDE puede regenerarse en cualquier momento a partir del XML autorizado; no e
 
 ## 8. Recetas por comprobante
 
-**Factura.** `factura.LineaIVA(codigo, descripcion, cantidad, precio, comprobante.IVA15)` crea una línea con un impuesto IVA; para ICE o varios impuestos, llene `Detalle.Impuestos`. A consumidor final (`comprobante.IDConsumidorFinal`, identificación `9999999999999`) el límite es USD 50. La versión por defecto es la 1.1.0 (hasta 6 decimales en cantidad y precio). Exportación: `InfoFactura.ComercioExterior = factura.ComercioExteriorExportador` y los campos de incoterm; los países usan los códigos de `comprobante.Paises` (Tabla 25 del SRI, **no** ISO 3166). Reembolso: llene `Factura.Reembolsos` y `Calcular` completa los totales.
+**Factura.** `factura.LineaIVA(codigo, descripcion, cantidad, precio, comprobante.IVA15)` crea una línea con un impuesto IVA a partir de su precio sin impuestos, y `factura.LineaPrecioFinal`, a partir de su precio final con IVA incluido (ver «Precios sin impuestos y precios finales», más abajo); para ICE o varios impuestos, llene `Detalle.Impuestos`. A consumidor final (`comprobante.IDConsumidorFinal`, identificación `9999999999999`) el límite es USD 50. La versión por defecto es la 1.1.0 (hasta 6 decimales en cantidad y precio). Exportación: `InfoFactura.ComercioExterior = factura.ComercioExteriorExportador` y los campos de incoterm; los países usan los códigos de `comprobante.Paises` (Tabla 25 del SRI, **no** ISO 3166). Reembolso: llene `Factura.Reembolsos` y `Calcular` completa los totales.
 
 **Nota de crédito.** `notacredito.DesdeFactura(f, motivo)` crea la nota que revierte por completo una factura; para una devolución parcial, recorte `Detalles`, ajuste cantidades y vuelva a `Calcular()`, que recalcula el IVA y el ICE deducido de cada línea (un ICE específico copiado de la factura debe ajustarlo usted). Necesita su propio secuencial y clave.
 
@@ -140,6 +140,35 @@ El RIDE puede regenerarse en cualquier momento a partir del XML autorizado; no e
 **Liquidación de compra.** Como una factura en la que el receptor es el proveedor; no admite consumidor final. `liquidacion.LineaIVA` crea las líneas.
 
 Receptores: notas de crédito y débito, retenciones y liquidaciones exigen identificar al receptor (RUC, cédula, pasaporte o identificación del exterior).
+
+### Precios sin impuestos y precios finales con IVA incluido
+
+Un detalle se define de una de dos maneras, y se pueden mezclar en un mismo comprobante:
+
+| | Precio sin impuestos (por defecto) | Precio final con IVA incluido |
+|---|---|---|
+| Qué indica la aplicación | `PrecioUnitario`, sin impuestos | `PrecioFinal`: lo que paga el comprador por unidad |
+| Constructor | `factura.LineaIVA(…, precioUnitario, codigoIVA)` | `factura.LineaPrecioFinal(…, precioFinal, codigoIVA)` |
+| Qué deduce `Calcular` | base = cantidad × precio − descuento; IVA = base × tarifa | importe = cantidad × precio final; base = importe / (1 + tarifa); IVA = importe − base; y el precio unitario |
+| Qué es exacto | El IVA respecto de la base | El importe que se cobra |
+| IVA total del comprobante | Tarifa sobre la base acumulada | Suma del IVA de las líneas |
+| 12,00 al 15 % | 10,43 + 1,56 = 11,99, o 10,44 + 1,57 = 12,01 | 10,43 + 1,57 = 12,00 |
+
+```go
+f.Detalles = []factura.Detalle{
+    factura.LineaPrecioFinal("ARR-01", "Arriendo de noviembre", decimal.Entero(1), decimal.MustParse("350.00"), comprobante.IVA15),
+    factura.LineaPrecioFinal("REC-01", "Recargo por mora", decimal.Entero(1), decimal.MustParse("12.00"), comprobante.IVA15),
+}
+f.Calcular() // 304,35 + 45,65 y 10,43 + 1,57; importe total 362,00
+```
+
+Use el precio final cuando el precio pactado con el cliente ya incluye el IVA y el comprobante debe sumar exactamente ese precio. Use el precio sin impuestos en los demás casos; es el modo de siempre y no cambia.
+
+- **Se declara, no se adivina.** `Validar` solo trata como precio final el detalle que lo declara, y lo contrasta con ese precio: la base más el IVA deben sumar cantidad × `PrecioFinal`, y la base debe ser ese importe entre (1 + tarifa), redondeado. No es un margen de un centavo: 1,00 + 0,16 no es la descomposición de 1,16 y se rechaza. Los demás detalles siguen la regla estricta.
+- **`PrecioFinal` no viaja en el XML.** Una factura de precios finales leída con `Parse` se valida por defecto como de precios sin impuestos, y puede dar `iva.valor`. Antes de validarla, recalcularla o hacer su nota de crédito, vuelva a dar el contexto: asigne a cada `Detalle.PrecioFinal` el precio de sus registros (lo más seguro: la factura se comprueba contra su precio), o llame a `f.DeclararPreciosFinales()`, que toma como precio final el que figura en cada línea. Guarde con cada comprobante si lo emitió con precios finales.
+- **Nota de crédito.** `DesdeFactura` copia los precios finales de la factura; si la factura viene de XML, llame antes a `DeclararPreciosFinales` (si no, `Validar` advierte con `origen.precio-final` y la nota puede diferir en centavos de la factura). Para una devolución parcial basta cambiar la cantidad y `Calcular`.
+- **Descuento.** `PrecioFinal` es el precio que se cobra, ya rebajado. `Descuento` (sin impuestos) solo informa de la rebaja: sube el precio unitario deducido y no cambia el importe.
+- **Límites.** Solo detalles cuyo único impuesto es el IVA: con ICE o IRBPNR indique el precio sin impuestos (`precio-final.impuestos`). Disponible en factura, liquidación de compra y nota de crédito. Cantidades menores que 10 000 y versiones con 6 decimales en el precio unitario (en la factura 1.0.0 y 2.0.0 y la nota de crédito 1.0.0, solo con cantidad 1): fuera de eso puede no existir un precio unitario exacto y `Validar` lo indica con `precio-final.base`.
 
 ## 9. Errores frecuentes del SRI
 

@@ -90,10 +90,7 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 	v.Texto("infoFactura.placa", info.Placa, false, 20)
 
 	// --- Detalles ------------------------------------------------------------
-	decimalesCantidad := 6
-	if ver == V100 || ver == V200 {
-		decimalesCantidad = 2
-	}
+	decimalesCantidad := DecimalesDePrecio(ver)
 	if len(f.Detalles) == 0 {
 		v.Errorf("detalles", "requerido", "la factura debe tener al menos un detalle")
 	}
@@ -120,6 +117,7 @@ func (f *Factura) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 		}
 	}
 	impuestos := v.TotalesImpuestos("infoFactura.totalConImpuestos", info.TotalConImpuestos, f.impuestosPorLinea()...)
+	v.TotalesPrecioFinal("infoFactura.totalConImpuestos", info.TotalConImpuestos, ImpuestosFinales(f.Detalles), f.impuestosPorLinea()...)
 	v.Compensaciones("infoFactura.compensaciones", info.Compensaciones, info.TotalConImpuestos)
 	if esperado := f.importeEsperado(impuestos); !info.ImporteTotal.Igual(esperado) {
 		v.Errorf("infoFactura.importeTotal", "totales.importe",
@@ -181,7 +179,11 @@ func ValidarDetalles(v *comprobante.Validador, detalles []Detalle, decimales int
 		if len(d.Impuestos) == 0 {
 			v.Errorf(p+"impuestos", "requerido", "cada detalle debe declarar al menos un impuesto (use IVA 0%%, no objeto o exento si no grava)")
 		}
-		v.ImpuestosDetalle(p, d.PrecioTotalSinImpuesto, d.Impuestos)
+		if d.PrecioFinal.EsCero() {
+			v.ImpuestosDetalle(p, d.PrecioTotalSinImpuesto, d.Impuestos)
+		} else {
+			v.ImpuestosDetallePrecioFinal(p, d.PrecioTotalSinImpuesto, d.Cantidad, d.PrecioFinal, d.Impuestos)
+		}
 		sumaLineas = sumaLineas.Sumar(d.PrecioTotalSinImpuesto)
 		sumaDescuentos = sumaDescuentos.Sumar(d.Descuento)
 	}
