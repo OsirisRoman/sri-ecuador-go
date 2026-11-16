@@ -79,7 +79,7 @@ Un comprobante **solo existe tributariamente cuando está AUTORIZADO**. `RECIBID
 
 | `res.Estado` | Qué pasó | Qué hacer |
 |---|---|---|
-| `sri.EstadoAutorizado` | El SRI lo autorizó, y el documento que devolvió es el enviado (`res.Verificado`) | Guardar `res.XMLAutorizado()` (es el documento válido), generar el RIDE, entregar al receptor |
+| `sri.EstadoAutorizado` | El SRI lo autorizó, y el documento que devolvió es el enviado: con `Reanudar`, `Emitir` y `ConsultarDocumento`, `res.Verificado` es siempre `true` en este estado | Guardar `res.XMLAutorizado()` (es el documento válido), generar el RIDE, entregar al receptor |
 | `sri.EstadoRecibido` | Aceptado para procesar, sin resultado todavía (`res.Pendiente()`) | Guardar como pendiente y consultar después con `cliente.ConsultarDocumento(ctx, xmlFirmado)` (la recepción ya está confirmada). No reemitir |
 | `sri.EstadoDevuelto` | La recepción lo rechazó (estructura, clave, emisor…) | Leer `res.Mensajes`, corregir y reenviar con la **misma** clave y el mismo secuencial (ficha 5.10) |
 | `sri.EstadoNoAutorizado` | Se recibió pero no se autorizó (firma, diferencias de cálculo…) | Leer `res.Mensajes`, corregir y reenviar con la **misma** clave y el mismo secuencial (ficha 5.10 y 5.12) |
@@ -87,6 +87,10 @@ Un comprobante **solo existe tributariamente cuando está AUTORIZADO**. `RECIBID
 | `err != nil` | No hubo respuesta (red, tiempo agotado), o el SRI respondió algo que no permite saber el estado (`sri.ErrEstadoIndeterminado`, `sri.ErrRespuestaIncoherente`). **Estado desconocido** | Reintentar `Reanudar` con el **mismo** XML firmado. No generar otra clave ni otro secuencial. No basta con `ConsultarDocumento`: el SRI responde igual a una clave que nunca recibió que a una en proceso, de modo que un comprobante que no llegó quedaría como pendiente para siempre |
 
 Un estado de autorización vacío o que el SDK no conoce no se convierte en `NO AUTORIZADO`: queda `EstadoRecibido` con `sri.ErrEstadoIndeterminado`, para que la aplicación no emita otro comprobante mientras el original puede seguir en curso.
+
+Lo mismo ocurre si el SRI informa `AUTORIZADO` pero no devuelve el comprobante: no se puede comprobar que el documento autorizado sea el suyo, y el resultado es `EstadoRecibido` con `sri.ErrSinComprobante` (que también es un `ErrEstadoIndeterminado`). `res.Autorizacion` lleva lo que respondió el SRI (número y fecha de autorización) para conciliarlo; no entregue el documento como autorizado y vuelva a consultar.
+
+**Varias autorizaciones para una clave.** Si el SRI devuelve más de una (el original rechazado y su corrección, por ejemplo), el resultado es el de la que contiene su documento, sea cual sea el orden en que lleguen. Todas quedan en `res.Autorizaciones`. `cliente.Autorizar(ctx, clave)` solo conoce la clave: informa el estado de la clave con `Verificado` en `false`, y no sirve para saber si el autorizado es su documento; para eso use `ConsultarDocumento`.
 
 **Corregir y reenviar.** Para corregir un comprobante devuelto o no autorizado, cambie los datos, llame a `Calcular()` **sin** volver a generar la clave (conserve `InfoTributaria.ClaveAcceso`) y vuelva a `Preparar` y `Reanudar`. Si la corrección cambia la fecha de emisión, la clave deja de corresponder (regla `clave.coherencia`). El SDK compara lo que el SRI devuelve con el XML enviado: mientras el SRI procesa la corrección, el `NO AUTORIZADO` de la versión anterior no se toma como resultado (queda `EstadoRecibido`), y si el SRI conserva otra versión **autorizada** con esa clave, el resultado es `EstadoDiscrepancia` y no un falso `AUTORIZADO`.
 
