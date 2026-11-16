@@ -326,6 +326,12 @@ type OpcionesValidacion struct {
 	// porcentaje no admitido), que por defecto son advertencias porque el
 	// catálogo puede estar desactualizado. Ver ConceptoRenta.
 	CatalogoRentaEstricto bool
+	// SustentoEstricto convierte en errores las reglas que contrastan las
+	// bases de retención con los importes del documento de sustento
+	// (retencion.base-iva, retencion.base-renta, sustento.base-iva), que por
+	// defecto son advertencias: el SDK solo conoce del sustento lo que
+	// declara este mismo comprobante. Ver ValidarCon.
+	SustentoEstricto bool
 }
 
 // Validar aplica las reglas que se pueden comprobar sin consultar al SRI y
@@ -467,6 +473,7 @@ func (c *ComprobanteRetencion) ValidarCon(op OpcionesValidacion) comprobante.Hal
 		if len(d.Retenciones) == 0 {
 			v.Errorf(q+"retenciones", "requerido", "debe haber al menos una retención por documento de sustento")
 		}
+		validarBasesSustento(v, q, d, op)
 		for j, ret := range d.Retenciones {
 			r := fmt.Sprintf("%sretenciones[%d].", q, j)
 			validarRetencion(v, r, ret.Codigo, ret.CodigoRetencion, ret.BaseImponible, ret.PorcentajeRetener, ret.ValorRetenido, info.FechaEmision, op)
@@ -518,6 +525,56 @@ func (c *ComprobanteRetencion) ValidarCon(op OpcionesValidacion) comprobante.Hal
 		v.Texto("maquinaFiscal.serie", m.Serie, true, 30)
 	}
 	return v.Hallazgos()
+}
+
+// validarBasesSustento contrasta las bases de retención de un documento de
+// sustento con los importes que declara ese mismo documento:
+//
+//   - retencion.base-iva: la retención de IVA se calcula sobre el IVA del
+//     comprobante de venta, así que sus bases no pueden sumar más que el
+//     IVA del sustento.
+//   - retencion.base-renta: la retención de renta se calcula sobre el valor
+//     sin IVA, así que sus bases no pueden sumar más que el importe total
+//     menos el IVA.
+//   - sustento.base-iva: las bases de IVA del sustento no pueden sumar más
+//     que su total sin impuestos más el ICE (Tabla 18; art. 58 LRTI).
+//
+// Sumar las bases detecta también una misma retención declarada dos veces.
+// Son advertencias salvo con OpcionesValidacion.SustentoEstricto: el SDK no
+// ve el comprobante de venta, solo los importes que se copiaron de él.
+func validarBasesSustento(v *comprobante.Validador, q string, d DocSustento, op OpcionesValidacion) {
+	reportar := v.Advertirf
+	if op.SustentoEstricto {
+		reportar = v.Errorf
+	}
+	iva, ice, basesIVA := decimal.Cero, decimal.Cero, decimal.Cero
+	for _, imp := range d.ImpuestosDocSustento {
+		switch imp.CodImpuestoDocSustento {
+		case comprobante.ImpuestoIVA:
+			iva = iva.Sumar(imp.ValorImpuesto)
+			basesIVA = basesIVA.Sumar(imp.BaseImponible)
+		case comprobante.ImpuestoICE:
+			ice = ice.Sumar(imp.ValorImpuesto)
+		}
+	}
+	retIVA, retRenta := decimal.Cero, decimal.Cero
+	for _, r := range d.Retenciones {
+		switch r.Codigo {
+		case ImpuestoIVA:
+			retIVA = retIVA.Sumar(r.BaseImponible)
+		case ImpuestoRenta:
+			retRenta = retRenta.Sumar(r.BaseImponible)
+		}
+	}
+	if retIVA.Cmp(iva) > 0 {
+		reportar(q+"retenciones", "retencion.base-iva", "las bases de las retenciones de IVA suman %s, más que el IVA del documento de sustento (%s)", retIVA, iva.Redondear(2))
+	}
+	if limite := d.ImporteTotal.Restar(iva); retRenta.Cmp(limite) > 0 {
+		reportar(q+"retenciones", "retencion.base-renta", "las bases de las retenciones de renta suman %s, más que el valor sin IVA del documento de sustento (%s)", retRenta, limite.Redondear(2))
+	}
+	if limite := d.TotalSinImpuestos.Sumar(ice); basesIVA.Cmp(limite) > 0 {
+		reportar(q+"impuestosDocSustento", "sustento.base-iva", "las bases de IVA suman %s, más que el total sin impuestos más el ICE (%s)", basesIVA, limite.Redondear(2))
+	}
 }
 
 // validarRetencion aplica las reglas de una línea de retención, comunes a
