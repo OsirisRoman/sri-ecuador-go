@@ -57,7 +57,7 @@ jobs:
         with:
           go-version: stable
       - name: Herramientas
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xmlsec1 libxml2-utils
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xmlsec1 libxml2-utils && xmlsec1 --version && xmllint --version
       - name: xmlsec1 y xmllint
         run: SRI_INTEROP=1 go test -count=1 -v ./internal/interop
       - name: Fuzzing breve
