@@ -50,6 +50,10 @@ El campo existe en los XSD y en los modelos, pero su valor lo autoriza un servic
 ## D15. Referencia abierta además de biblioteca
 La documentación separa las reglas del SRI de las decisiones de este SDK (`docs/referencia/`) y se acompaña de vectores de prueba (`vectores/`) que las pruebas del proyecto mantienen coherentes con el código, para que sirva a implementaciones en otros lenguajes. Lo que falta se documenta en `docs/pendientes.md` con el mismo cuidado que lo que funciona.
 
+## D16. Validación XSD con `github.com/cB-Sigma/xsd`
+Validar contra los XSD oficiales exige un validador de XML Schema 1.0, que la biblioteca estándar no tiene. Se adoptó `cB-Sigma/xsd` (Apache-2.0, solo biblioteca estándar, sin cgo ni acceso a red: lee los esquemas de un `fs.FS`) frente a `lestrrat-go/helium` y `knroy/go-xml`, reimplementaciones completas de libxml2 o de la pila XML de cientos de miles de líneas, para una sola función (evaluación en `fuentes.md`).
+*Riesgo:* es un proyecto joven, de un solo autor, con poca adopción. Se mitiga así: la versión está fijada por `go.sum` y `go mod verify` corre en el CI; el CI contrasta su veredicto con el de `xmllint` en los ejemplos oficiales y en variantes inválidas (`internal/interop`); y el SRI vuelve a validar el XSD al recibir (código 35), de modo que un fallo del validador produce una devolución, no un comprobante inválido autorizado. Cada actualización de la dependencia debe pasar esas pruebas.
+
 ## Discrepancias abiertas
 Las que siguen están desarrolladas, con lo que falta para resolverlas, en `pendientes.md`.
 
