@@ -34,7 +34,8 @@ Comprobantes que la v0.1.0 firmaba ahora se rechazan o cambian de estado. Las re
 ### Corregido
 
 - El validador aceptaba una línea de 100,00 con IVA declarado de 0,15, dos IVA por línea, un centavo de más por línea acumulado en el total y una tarifa del total incoherente (AUD-001, AUD-003, AUD-010).
-- Reenviar con la misma clave un comprobante distinto terminaba en AUTORIZADO con el XML de otro documento (AUD-002).
+- Reenviar con la misma clave un comprobante distinto terminaba en AUTORIZADO con el XML de otro documento (AUD-002). Una corrección reenviada con la misma clave según la ficha (5.10) queda pendiente mientras el SRI solo muestra el NO AUTORIZADO de la versión anterior.
+- `retencion.Calcular` calculaba el IVA del sustento sobre la base sin redondear.
 - Retenciones con bases mayores que el sustento y notas de crédito mayores que la factura pasaban sin hallazgos (AUD-004).
 - `XMLAutorizado` no escapaba los campos de la autorización (AUD-006).
 - Firmar con un certificado sin clave provocaba un pánico (AUD-007).
@@ -46,7 +47,7 @@ Comprobantes que la v0.1.0 firmaba ahora se rechazan o cambian de estado. Las re
 
 ### Limitaciones
 
-Las de la v0.1.0 siguen vigentes. Además, las reglas nuevas no se han contrastado con el ambiente de pruebas del SRI (pendiente 15): podrían ser más estrictas o más laxas que el SRI en algún caso.
+Las de la v0.1.0 siguen vigentes. Las reglas nuevas no rechazan ninguno de los 24 comprobantes que el SRI ya autorizó, pero no se han enviado al ambiente de pruebas casos que las incumplan (pendiente 15): podrían ser más laxas que el SRI en algún caso.
 
 ## v0.1.0 — primera versión pública (pre-release) — 2026-11-15
 

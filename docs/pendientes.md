@@ -164,7 +164,7 @@ Desde este proyecto no se ha enviado nada a producción, y el ambiente de prueba
 
 ## 15. Reglas de la auditoría de v0.1.0 frente al SRI
 
-**Estado.** La versión 0.2.0 añadió reglas de validación y de interpretación de respuestas a raíz de una auditoría independiente ([`auditoria-v0.1.0.md`](auditoria-v0.1.0.md)). Se basan en la ficha técnica y en la ley, y tienen pruebas locales y contra `xmlsec1` y libxml2, pero no se han contrastado con el ambiente de pruebas del SRI.
+**Estado.** La versión 0.2.0 añadió reglas de validación y de interpretación de respuestas a raíz de una auditoría independiente ([`auditoria-v0.1.0.md`](auditoria-v0.1.0.md)). Se basan en la ficha técnica y en la ley, y tienen pruebas locales y contra `xmlsec1` y libxml2. **Comprobado sin enviar nada:** no rechazan ninguno de los 24 comprobantes que el SRI ya había autorizado. **Sin comprobar:** que el SRI rechace los casos que ahora rechaza el SDK.
 
 **Qué falta comprobar en el ambiente de pruebas.**
 
