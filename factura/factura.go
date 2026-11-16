@@ -239,7 +239,7 @@ func (f *Factura) Info() comprobante.InfoTributaria { return f.InfoTributaria }
 // comprobarla use xades.Verificar).
 func Parse(doc []byte) (*Factura, error) {
 	var f Factura
-	if err := xml.Unmarshal(doc, &f); err != nil {
+	if err := comprobante.Deserializar(doc, &f); err != nil {
 		return nil, fmt.Errorf("factura: XML ilegible: %w", err)
 	}
 	return &f, nil

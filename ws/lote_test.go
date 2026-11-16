@@ -66,6 +66,7 @@ func TestLoteXML(t *testing.T) {
 		"sin comprobantes":  {ClaveAcceso: l.ClaveAcceso, RUC: l.RUC},
 		"clave inválida":    {ClaveAcceso: "123", RUC: l.RUC, Comprobantes: docs},
 		"RUC corto":         {ClaveAcceso: l.ClaveAcceso, RUC: "123", Comprobantes: docs},
+		"RUC con marcado":   {ClaveAcceso: l.ClaveAcceso, RUC: "</ruc><x>1234", Comprobantes: docs},
 		"comprobante vacío": {ClaveAcceso: l.ClaveAcceso, RUC: l.RUC, Comprobantes: [][]byte{nil}},
 		"más de 50":         {ClaveAcceso: l.ClaveAcceso, RUC: l.RUC, Comprobantes: make([][]byte, 51)},
 		"más de 500 kB":     {ClaveAcceso: l.ClaveAcceso, RUC: l.RUC, Comprobantes: [][]byte{[]byte(strings.Repeat("x", ws.TamanoMaximoLote))}},

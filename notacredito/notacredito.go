@@ -40,6 +40,10 @@ type NotaCredito struct {
 	Detalles        comprobante.Lista[Detalle]                    `xml:"detalles"`
 	MaquinaFiscal   *comprobante.MaquinaFiscal                    `xml:"maquinaFiscal,omitempty"`
 	InfoAdicional   comprobante.Lista[comprobante.CampoAdicional] `xml:"infoAdicional,omitempty"`
+
+	// origen es la factura modificada, si la aplicación la asoció
+	// (AsociarFactura o DesdeFactura). No forma parte del XML.
+	origen *origen
 }
 
 // InfoNotaCredito es el bloque <infoNotaCredito>.
@@ -114,7 +118,7 @@ func (n *NotaCredito) XML() ([]byte, error) {
 // Parse lee una nota de crédito desde su XML, firmado o no.
 func Parse(doc []byte) (*NotaCredito, error) {
 	var n NotaCredito
-	if err := xml.Unmarshal(doc, &n); err != nil {
+	if err := comprobante.Deserializar(doc, &n); err != nil {
 		return nil, fmt.Errorf("notacredito: XML ilegible: %w", err)
 	}
 	return &n, nil
@@ -134,6 +138,10 @@ func LineaIVA(codigo, descripcion string, cantidad, precioUnitario decimal.Decim
 // (InfoTributaria.Secuencial), la fecha de emisión si no es hoy, y la clave
 // de acceso (GenerarClaveAcceso). Para una devolución parcial, ajuste los
 // Detalles y llame a Calcular.
+//
+// La nota de crédito queda asociada a f (ver AsociarFactura): Validar
+// comprueba que no devuelva más de lo facturado. Si sobre la misma factura
+// ya se emitieron otras notas de crédito, páselas con AsociarFactura.
 func DesdeFactura(f *factura.Factura, motivo string) *NotaCredito {
 	it := f.InfoTributaria
 	it.CodDoc = comprobante.CodNotaCredito
@@ -165,6 +173,7 @@ func DesdeFactura(f *factura.Factura, motivo string) *NotaCredito {
 		})
 	}
 	n.Calcular()
+	n.AsociarFactura(f)
 	return n
 }
 
@@ -319,9 +328,7 @@ func (n *NotaCredito) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 		if len(d.Impuestos) == 0 {
 			v.Errorf(q+"impuestos", "requerido", "cada detalle debe declarar al menos un impuesto")
 		}
-		for j, imp := range d.Impuestos {
-			v.ImpuestoLinea(fmt.Sprintf("%simpuestos[%d].", q, j), imp)
-		}
+		v.ImpuestosDetalle(q, d.PrecioTotalSinImpuesto, d.Impuestos)
 		suma = suma.Sumar(d.PrecioTotalSinImpuesto)
 	}
 
@@ -362,6 +369,9 @@ func (n *NotaCredito) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 		v.Texto("maquinaFiscal.marca", m.Marca, true, 30)
 		v.Texto("maquinaFiscal.modelo", m.Modelo, true, 30)
 		v.Texto("maquinaFiscal.serie", m.Serie, true, 30)
+	}
+	if n.origen != nil {
+		n.validarContra(v, n.origen.factura, n.origen.anteriores)
 	}
 	return v.Hallazgos()
 }

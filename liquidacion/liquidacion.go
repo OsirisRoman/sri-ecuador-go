@@ -115,7 +115,7 @@ func (l *LiquidacionCompra) XML() ([]byte, error) {
 // Parse lee una liquidación de compra desde su XML, firmado o no.
 func Parse(doc []byte) (*LiquidacionCompra, error) {
 	var l LiquidacionCompra
-	if err := xml.Unmarshal(doc, &l); err != nil {
+	if err := comprobante.Deserializar(doc, &l); err != nil {
 		return nil, fmt.Errorf("liquidacion: XML ilegible: %w", err)
 	}
 	return &l, nil
@@ -240,6 +240,7 @@ func (l *LiquidacionCompra) ValidarCon(op OpcionesValidacion) comprobante.Hallaz
 		v.Errorf("detalles", "requerido", "la liquidación debe tener al menos un detalle")
 	}
 	sumaLineas, sumaDesc := factura.ValidarDetalles(v, l.Detalles, decimales)
+	factura.VigenciaDetalles(v, l.Detalles, info.FechaEmision)
 	v.Numero(p+"totalSinImpuestos", info.TotalSinImpuestos, 14, 2)
 	v.Numero(p+"totalDescuento", info.TotalDescuento, 14, 2)
 	v.Numero(p+"importeTotal", info.ImporteTotal, 14, 2)

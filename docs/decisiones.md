@@ -26,8 +26,9 @@ El SRI asigna RUC que no cumplen el módulo 11 clásico; exigirlo rechazaría co
 ## D7. Ajustes a los XSD publicados, explícitos y en memoria
 El XSD publicado solo admite `CONTRIBUYENTE RÉGIMEN RIMPE`, pero el Anexo 22 exige además `CONTRIBUYENTE NEGOCIO POPULAR - RÉGIMEN RIMPE`. Los archivos se incrustan intactos; la corrección se aplica al cargar y está declarada en `esquema.Ajustes`. `esquema.ValidarEstricto` usa los archivos literales. **(revisable)**: falta confirmar con el SRI real, lo que requiere un emisor que sea negocio popular.
 
-## D8. Reintentar el envío es seguro
-Reenviar un comprobante ya recibido no lo duplica: el SRI responde 43 o 70 (el 43 está confirmado con el SRI real). El cliente lo interpreta como «ya recibido» y pasa a consultar la autorización, lo que hace idempotente a `Reanudar`.
+## D8. Reintentar el envío es seguro, y el resultado se contrasta con lo enviado
+Reenviar un comprobante ya recibido no lo duplica: el SRI responde 43 o 70 (el 43 está confirmado con el SRI real). El cliente lo interpreta como «ya recibido» y pasa a consultar la autorización, lo que hace idempotente a `Reanudar` **para el mismo documento**.
+Un 43 no prueba que el SRI tenga ese documento: la ficha (5.10) obliga a reenviar un comprobante corregido con la misma clave, así que puede haber otra versión registrada. Por eso `Reanudar` y `ConsultarDocumento` comparan el comprobante que devuelve la autorización con el enviado mediante `xades.Huella` (SHA-256 de la forma canónica sin la firma: lo que firma la referencia `#comprobante`). Se descartaron la comparación byte a byte (el SRI podría reserializar) y la de `SignatureValue` (dos firmas del mismo contenido serían una «discrepancia» falsa). Si difieren, el resultado es `EstadoDiscrepancia`. Un estado de autorización vacío o desconocido, o una respuesta de otra clave o de otro ambiente, se trata como desconocido (`EstadoRecibido` con error) y nunca como rechazo.
 
 ## D9. El ambiente es obligatorio y se comprueba
 `sri.Config.Ambiente` no tiene valor por defecto y el cliente rechaza comprobantes de otro ambiente. Un ambiente desconocido nunca resuelve a las direcciones de producción.
@@ -49,6 +50,10 @@ El campo existe en los XSD y en los modelos, pero su valor lo autoriza un servic
 
 ## D15. Referencia abierta además de biblioteca
 La documentación separa las reglas del SRI de las decisiones de este SDK (`docs/referencia/`) y se acompaña de vectores de prueba (`vectores/`) que las pruebas del proyecto mantienen coherentes con el código, para que sirva a implementaciones en otros lenguajes. Lo que falta se documenta en `docs/pendientes.md` con el mismo cuidado que lo que funciona.
+
+## D16. Validación XSD con `github.com/cB-Sigma/xsd`
+Validar contra los XSD oficiales exige un validador de XML Schema 1.0, que la biblioteca estándar no tiene. Se adoptó `cB-Sigma/xsd` (Apache-2.0, solo biblioteca estándar, sin cgo ni acceso a red: lee los esquemas de un `fs.FS`) frente a `lestrrat-go/helium` y `knroy/go-xml`, reimplementaciones completas de libxml2 o de la pila XML de cientos de miles de líneas, para una sola función (evaluación en `fuentes.md`).
+*Riesgo:* es un proyecto joven, de un solo autor, con poca adopción. Se mitiga así: la versión está fijada por `go.sum` y `go mod verify` corre en el CI; el CI contrasta su veredicto con el de `xmllint` en los ejemplos oficiales y en variantes inválidas (`internal/interop`); y el SRI vuelve a validar el XSD al recibir (código 35), de modo que un fallo del validador produce una devolución, no un comprobante inválido autorizado. Cada actualización de la dependencia debe pasar esas pruebas.
 
 ## Discrepancias abiertas
 Las que siguen están desarrolladas, con lo que falta para resolverlas, en `pendientes.md`.

@@ -89,6 +89,7 @@ func Analizar(datos []byte) (*Documento, error) {
 	var actual *Elemento
 	prof := 0
 	for {
+		ini := dec.InputOffset()
 		tok, err := dec.RawToken()
 		if err == io.EOF {
 			break
@@ -105,7 +106,17 @@ func Analizar(datos []byte) (*Documento, error) {
 				return nil, fmt.Errorf("%w: más de un elemento raíz", ErrMalFormado)
 			}
 			e := &Elemento{Prefijo: t.Name.Space, Local: t.Name.Local, Padre: actual}
+			if err := normalizarAtributos(t.Attr, datos[ini:dec.InputOffset()]); err != nil {
+				return nil, err
+			}
+			vistos := make(map[xml.Name]bool, len(t.Attr))
 			for _, a := range t.Attr {
+				// Un atributo repetido hace que el documento no esté bien
+				// formado (XML 1.0, restricción «Unique Att Spec»).
+				if vistos[a.Name] {
+					return nil, fmt.Errorf("%w: atributo %s repetido en <%s>", ErrMalFormado, nombreAttr(a.Name), t.Name.Local)
+				}
+				vistos[a.Name] = true
 				switch {
 				case a.Name.Space == "" && a.Name.Local == "xmlns":
 					e.declarar("", a.Value)
@@ -163,6 +174,34 @@ func Analizar(datos []byte) (*Documento, error) {
 	return &doc, nil
 }
 
+// normalizarAtributos reemplaza el valor de cada atributo por el que
+// resulta de normalizar su texto original (ver atributos.go). Solo hace
+// falta cuando la etiqueta contiene tabuladores o saltos de línea.
+func normalizarAtributos(attrs []xml.Attr, etiqueta []byte) error {
+	if len(attrs) == 0 || !bytes.ContainsAny(etiqueta, "\t\n\r") {
+		return nil
+	}
+	crudos, err := valoresCrudos(etiqueta)
+	if err != nil || len(crudos) != len(attrs) {
+		return fmt.Errorf("%w: no se pudieron leer los atributos de %.40q", ErrMalFormado, etiqueta)
+	}
+	for i := range attrs {
+		v, err := normalizarValor(crudos[i])
+		if err != nil {
+			return fmt.Errorf("%w: valor de atributo %.40q", ErrMalFormado, crudos[i])
+		}
+		attrs[i].Value = v
+	}
+	return nil
+}
+
+func nombreAttr(n xml.Name) string {
+	if n.Space == "" {
+		return n.Local
+	}
+	return n.Space + ":" + n.Local
+}
+
 func (e *Elemento) declarar(prefijo, uri string) {
 	if e.NS == nil {
 		e.NS = map[string]string{}
@@ -176,12 +215,22 @@ func (e *Elemento) comprobarPrefijos() error {
 			return fmt.Errorf("%w: %s:%s", ErrPrefijoNoNS, e.Prefijo, e.Local)
 		}
 	}
+	expandidos := map[[2]string]bool{}
 	for _, a := range e.Attrs {
+		uri := ""
 		if a.Prefijo != "" {
-			if _, ok := e.ResolverPrefijo(a.Prefijo); !ok {
+			var ok bool
+			if uri, ok = e.ResolverPrefijo(a.Prefijo); !ok {
 				return fmt.Errorf("%w: atributo %s:%s", ErrPrefijoNoNS, a.Prefijo, a.Local)
 			}
 		}
+		// Dos prefijos ligados al mismo espacio de nombres no pueden
+		// calificar el mismo atributo (Namespaces in XML, sección 6.3).
+		k := [2]string{uri, a.Local}
+		if expandidos[k] {
+			return fmt.Errorf("%w: atributo {%s}%s repetido en <%s>", ErrMalFormado, uri, a.Local, e.Local)
+		}
+		expandidos[k] = true
 	}
 	for _, h := range e.Hijos {
 		if he, ok := h.(*Elemento); ok {

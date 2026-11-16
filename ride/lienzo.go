@@ -17,7 +17,7 @@ const (
 	separa    = 14.0 // separación vertical entre bloques
 )
 
-// par es un dato rotulado: «Identificación: 1790011674001».
+// par es un dato rotulado: «Identificación: 1790000001001».
 type par struct{ rotulo, valor string }
 
 type alineacion int

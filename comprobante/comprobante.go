@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
+	"github.com/OsirisRoman/sri-ecuador-go/internal/xmldom"
 )
 
 // Ambiente es el tipo de ambiente (ficha técnica, Tabla 4).
@@ -212,7 +213,9 @@ const (
 	PagoEndosoTitulos        = "21"
 )
 
-// FormasPago describe las formas de pago vigentes de la Tabla 24.
+// FormasPago describe las formas de pago vigentes de la Tabla 24. Es una
+// copia de consulta: modificarla no altera las validaciones del SDK, que
+// usan FormaPagoDe.
 var FormasPago = map[string]string{
 	PagoSinSistemaFinanciero: "SIN UTILIZACION DEL SISTEMA FINANCIERO",
 	PagoCompensacionDeudas:   "COMPENSACIÓN DE DEUDAS",
@@ -274,7 +277,9 @@ const (
 	IVA13           = "10"
 )
 
-// TarifasIVA es la Tabla 17 de la ficha técnica v2.34.
+// TarifasIVA es la Tabla 17 de la ficha técnica v2.34. Es una copia de
+// consulta: modificarla no altera los cálculos ni las validaciones del SDK,
+// que usan TarifaIVADe.
 var TarifasIVA = map[string]TarifaIVA{
 	IVA0:            {IVA0, decimal.Entero(0), true, "0%"},
 	IVA12:           {IVA12, decimal.Entero(12), true, "12%"},
@@ -297,4 +302,16 @@ func Serializar(v any) ([]byte, error) {
 		return nil, fmt.Errorf("comprobante: no se pudo serializar: %w", err)
 	}
 	return append([]byte(xml.Header), cuerpo...), nil
+}
+
+// Deserializar lee un comprobante desde XML en v. Antes de decodificarlo
+// comprueba el documento con el mismo analizador que la firma: rechaza
+// DOCTYPE, atributos repetidos, documentos demasiado grandes o profundos y
+// cualquier XML mal formado que encoding/xml aceptaría, para que lo que se
+// lee sea exactamente lo que verifica xades.Verificar.
+func Deserializar(doc []byte, v any) error {
+	if _, err := xmldom.Analizar(doc); err != nil {
+		return err
+	}
+	return xml.Unmarshal(doc, v)
 }

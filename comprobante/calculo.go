@@ -2,6 +2,7 @@ package comprobante
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/OsirisRoman/sri-ecuador-go/clave"
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
@@ -45,7 +46,7 @@ func CalcularImpuestos(total decimal.Decimal, impuestos []Impuesto) {
 		if imp.Codigo != ImpuestoIVA {
 			continue
 		}
-		if t, ok := TarifasIVA[imp.CodigoPorcentaje]; ok && t.Fija {
+		if t, ok := tarifasIVA[imp.CodigoPorcentaje]; ok && t.Fija {
 			imp.Tarifa = t.Tarifa
 		}
 		imp.BaseImponible = total.Sumar(ice).Redondear(2)
@@ -99,9 +100,23 @@ func AgruparImpuestos(porLinea ...[]Impuesto) []GrupoImpuesto {
 	return orden
 }
 
-// toleranciaImpuesto es la diferencia admitida entre el impuesto declarado
-// en una línea y base × tarifa.
-var toleranciaImpuesto = decimal.MustParse("0.01")
+// medioCentavo es la mayor distancia entre un importe exacto y su valor
+// redondeado al centavo más cercano.
+var medioCentavo = decimal.MustParse("0.005")
+
+// ImporteRedondeado informa si declarado es el importe exacto redondeado al
+// centavo más cercano: |declarado − exacto| ≤ 0,005. Admite los dos
+// criterios de desempate habituales (mitad hacia arriba y mitad al par),
+// que solo difieren cuando el exacto termina justo en medio centavo, pero
+// rechaza cualquier diferencia de un centavo o más.
+//
+// La ficha técnica no publica una tolerancia: el código 52 («error en
+// diferencias») se produce «cuando existe error en los cálculos del
+// comprobante» (sección 11). Por eso el SDK no admite más diferencia que la
+// que produce el propio redondeo.
+func ImporteRedondeado(declarado, exacto decimal.Decimal) bool {
+	return declarado.Restar(exacto).Abs().Cmp(medioCentavo) <= 0
+}
 
 // Numero valida las facetas de un xsd:decimal del SRI: no negativo, con un
 // máximo de dígitos totales y de decimales.
@@ -129,7 +144,7 @@ func (v *Validador) ImpuestoLinea(p string, imp Impuesto) {
 	}
 	switch imp.Codigo {
 	case ImpuestoIVA:
-		t, ok := TarifasIVA[imp.CodigoPorcentaje]
+		t, ok := tarifasIVA[imp.CodigoPorcentaje]
 		if !ok {
 			v.Errorf(p+"codigoPorcentaje", "catalogo", "código de IVA %q desconocido (Tabla 17)", imp.CodigoPorcentaje)
 			return
@@ -137,14 +152,57 @@ func (v *Validador) ImpuestoLinea(p string, imp Impuesto) {
 		if t.Fija && !imp.Tarifa.Igual(t.Tarifa) {
 			v.Errorf(p+"tarifa", "iva.tarifa", "el código %s corresponde a %s; la tarifa declarada es %s", t.Codigo, t.Descripcion, imp.Tarifa)
 		}
-		esperado := imp.BaseImponible.Porcentaje(imp.Tarifa).Redondear(2)
-		if imp.Valor.Restar(esperado).Abs().Cmp(toleranciaImpuesto) > 0 {
-			v.Errorf(p+"valor", "iva.valor", "es %s pero base × tarifa = %s", imp.Valor, esperado)
+		if exacto := imp.BaseImponible.Porcentaje(imp.Tarifa); !ImporteRedondeado(imp.Valor, exacto) {
+			v.Errorf(p+"valor", "iva.valor", "es %s pero base × tarifa = %s", imp.Valor, exacto.Redondear(2))
 		}
 	case ImpuestoICE, ImpuestoIRBPNR:
 		// Tarifas específicas o mixtas: no se recalculan aquí.
 	default:
 		v.Errorf(p+"codigo", "catalogo", "código de impuesto %q desconocido (Tabla 16: 2 IVA, 3 ICE, 5 IRBPNR)", imp.Codigo)
+	}
+}
+
+// ImpuestosDetalle valida los impuestos de un detalle de venta (factura,
+// liquidación de compra o nota de crédito) en conjunto con el total de la
+// línea, además de cada impuesto por separado (ImpuestoLinea). p es la ruta
+// del detalle terminada en punto y totalLinea su precioTotalSinImpuesto.
+//
+//   - iva.base: la base del IVA es el total de la línea más el ICE de la
+//     misma línea, porque «el valor del ICE formará parte de la base
+//     imponible del IVA» (ficha técnica, Tabla 18; art. 58 de la LRTI) y el
+//     facturador del SRI calcula así el IVA (sección 9.16, campo 8). El
+//     IRBPNR no forma parte de esa base.
+//   - iva.unico: un detalle no puede llevar más de un IVA; cada bien o
+//     servicio tiene una sola tarifa de la Tabla 17.
+//   - iva.ausente (advertencia): un detalle sin IVA. Lo que no grava IVA se
+//     declara con tarifa 0 %, no objeto (6) o exento (7); el XSD no lo
+//     exige y no se ha comprobado si el SRI lo rechaza.
+//
+// No se recalculan la base ni el valor del ICE ni del IRBPNR: dependen de
+// tarifas específicas, del precio de venta al público o de la cantidad.
+func (v *Validador) ImpuestosDetalle(p string, totalLinea decimal.Decimal, impuestos []Impuesto) {
+	ice := decimal.Cero
+	for _, imp := range impuestos {
+		if imp.Codigo == ImpuestoICE {
+			ice = ice.Sumar(imp.Valor)
+		}
+	}
+	nIVA := 0
+	for j, imp := range impuestos {
+		q := fmt.Sprintf("%simpuestos[%d].", p, j)
+		v.ImpuestoLinea(q, imp)
+		if imp.Codigo != ImpuestoIVA {
+			continue
+		}
+		if nIVA++; nIVA == 2 {
+			v.Errorf(q+"codigo", "iva.unico", "el detalle declara más de un IVA; cada bien o servicio tiene una sola tarifa (Tabla 17)")
+		}
+		if base := totalLinea.Sumar(ice); !imp.BaseImponible.Igual(base) {
+			v.Errorf(q+"baseImponible", "iva.base", "es %s pero debe ser el total de la línea más su ICE = %s", imp.BaseImponible, base.Redondear(2))
+		}
+	}
+	if len(impuestos) > 0 && nIVA == 0 {
+		v.Advertirf(p+"impuestos", "iva.ausente", "el detalle no declara IVA; lo que no grava IVA se declara con tarifa 0 %%, no objeto (6) o exento (7)")
 	}
 }
 
@@ -160,7 +218,9 @@ func (v *Validador) TotalesImpuestos(campo string, declarados []TotalImpuesto, p
 	// corresponder a un mismo par código/porcentaje.
 	bases := map[par]decimal.Decimal{}
 	recalculado := map[par]decimal.Decimal{}
+	exacto := map[par]decimal.Decimal{}
 	sumaLineas := map[par]decimal.Decimal{}
+	tarifas := map[par][]decimal.Decimal{}
 	var orden []par
 	for _, g := range AgruparImpuestos(porLinea...) {
 		k := par{g.Codigo, g.CodigoPorcentaje}
@@ -169,7 +229,9 @@ func (v *Validador) TotalesImpuestos(campo string, declarados []TotalImpuesto, p
 		}
 		bases[k] = bases[k].Sumar(g.Base)
 		recalculado[k] = recalculado[k].Sumar(g.Valor())
+		exacto[k] = exacto[k].Sumar(g.Base.Porcentaje(g.Tarifa))
 		sumaLineas[k] = sumaLineas[k].Sumar(g.SumaLineas)
+		tarifas[k] = append(tarifas[k], g.Tarifa)
 	}
 	acumulados := map[par]TotalImpuesto{}
 	total := decimal.Cero
@@ -187,6 +249,8 @@ func (v *Validador) TotalesImpuestos(campo string, declarados []TotalImpuesto, p
 		acumulados[k] = t
 		if _, ok := bases[k]; !ok && len(porLinea) > 0 {
 			v.Errorf(p+"codigo", "totales.impuesto-sin-detalle", "el impuesto %s/%s no aparece en ningún detalle", t.Codigo, t.CodigoPorcentaje)
+		} else if t.Tarifa != nil && len(porLinea) > 0 && !contiene(tarifas[k], *t.Tarifa) {
+			v.Errorf(p+"tarifa", "totales.tarifa", "es %s pero los detalles con el impuesto %s/%s declaran %s", *t.Tarifa, t.Codigo, t.CodigoPorcentaje, listaDecimales(tarifas[k]))
 		}
 	}
 	for _, k := range orden {
@@ -199,15 +263,35 @@ func (v *Validador) TotalesImpuestos(campo string, declarados []TotalImpuesto, p
 		if !t.BaseImponible.Igual(bases[k]) {
 			v.Errorf(c+".baseImponible", "totales.base", "es %s pero las bases de los detalles suman %s", t.BaseImponible, bases[k].Redondear(2))
 		}
-		// Se acepta tanto el impuesto calculado sobre la base acumulada
-		// como la suma de los impuestos de cada línea: ambos criterios son
-		// de uso corriente y difieren, como mucho, en centavos de redondeo.
-		if !t.Valor.Igual(recalculado[k]) && !t.Valor.Igual(sumaLineas[k]) {
+		// Se acepta el impuesto calculado sobre la base acumulada (redondeado
+		// al centavo más cercano) o la suma exacta de los impuestos de cada
+		// línea (decisión D5). Como cada línea solo admite su propio
+		// redondeo (ImporteRedondeado), los dos criterios difieren a lo sumo
+		// en medio centavo por línea, y ninguna otra diferencia pasa.
+		if !t.Valor.Igual(recalculado[k]) && !t.Valor.Igual(sumaLineas[k]) &&
+			(k.codigo != ImpuestoIVA || len(tarifas[k]) != 1 || !ImporteRedondeado(t.Valor, exacto[k])) {
 			v.Errorf(c+".valor", "totales.impuesto", "es %s; se esperaba %s (sobre la base total) o %s (suma de las líneas)",
 				t.Valor, recalculado[k], sumaLineas[k].Redondear(2))
 		}
 	}
 	return total
+}
+
+func contiene(ds []decimal.Decimal, d decimal.Decimal) bool {
+	for _, x := range ds {
+		if x.Igual(d) {
+			return true
+		}
+	}
+	return false
+}
+
+func listaDecimales(ds []decimal.Decimal) string {
+	partes := make([]string, len(ds))
+	for i, d := range ds {
+		partes[i] = d.String()
+	}
+	return strings.Join(partes, ", ")
 }
 
 // ClaveAcceso comprueba que la clave de acceso de infoTributaria sea válida

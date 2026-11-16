@@ -548,7 +548,7 @@ func (m *modelo) cierre(l *lienzo) {
 		}
 		for _, p := range m.pagos {
 			nombre := p.FormaPago
-			if d, ok := comprobante.FormasPago[p.FormaPago]; ok {
+			if d, ok := comprobante.FormaPagoDe(p.FormaPago); ok {
 				nombre += " - " + d
 			}
 			fila := []string{nombre, p.Total.String()}

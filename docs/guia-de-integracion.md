@@ -29,7 +29,7 @@ Go 1.26 o superior. Sin cgo ni programas externos (ni Java, ni OpenSSL, ni bases
 
 | Necesito… | Paquete | Punto de entrada |
 |---|---|---|
-| Emitir de principio a fin | `sri` (raíz) | `sri.Nuevo`, `Cliente.Preparar`, `Cliente.Reanudar`, `Cliente.Emitir`, `Cliente.Autorizar` |
+| Emitir de principio a fin | `sri` (raíz) | `sri.Nuevo`, `Cliente.Preparar`, `Cliente.Reanudar`, `Cliente.Emitir`, `Cliente.ConsultarDocumento`, `Cliente.Autorizar` |
 | Factura | `factura` | `factura.Factura`, `factura.LineaIVA` |
 | Nota de crédito | `notacredito` | `notacredito.DesdeFactura` |
 | Nota de débito | `notadebito` | `notadebito.NotaDebito`, `notadebito.ImpuestoIVA` |
@@ -79,11 +79,16 @@ Un comprobante **solo existe tributariamente cuando está AUTORIZADO**. `RECIBID
 
 | `res.Estado` | Qué pasó | Qué hacer |
 |---|---|---|
-| `sri.EstadoAutorizado` | El SRI lo autorizó | Guardar `res.XMLAutorizado()` (es el documento válido), generar el RIDE, entregar al receptor |
-| `sri.EstadoRecibido` | Aceptado para procesar, sin resultado todavía (`res.Pendiente()`) | Guardar como pendiente y consultar después con `cliente.Autorizar(ctx, clave)`. No reemitir |
-| `sri.EstadoDevuelto` | La recepción lo rechazó (estructura, clave, emisor…) | Leer `res.Mensajes`, corregir y volver a emitir |
-| `sri.EstadoNoAutorizado` | Se recibió pero no se autorizó (firma, diferencias de cálculo…) | Leer `res.Mensajes`, corregir y volver a emitir |
-| `err != nil` | No hubo respuesta (red, tiempo agotado). **Estado desconocido** | Reintentar `Reanudar` con el **mismo** XML firmado. No generar otra clave ni otro secuencial |
+| `sri.EstadoAutorizado` | El SRI lo autorizó, y el documento que devolvió es el enviado (`res.Verificado`) | Guardar `res.XMLAutorizado()` (es el documento válido), generar el RIDE, entregar al receptor |
+| `sri.EstadoRecibido` | Aceptado para procesar, sin resultado todavía (`res.Pendiente()`) | Guardar como pendiente y consultar después con `cliente.ConsultarDocumento(ctx, xmlFirmado)`. No reemitir |
+| `sri.EstadoDevuelto` | La recepción lo rechazó (estructura, clave, emisor…) | Leer `res.Mensajes`, corregir y reenviar con la **misma** clave y el mismo secuencial (ficha 5.10) |
+| `sri.EstadoNoAutorizado` | Se recibió pero no se autorizó (firma, diferencias de cálculo…) | Leer `res.Mensajes`, corregir y reenviar con la **misma** clave y el mismo secuencial (ficha 5.10 y 5.12) |
+| `sri.EstadoDiscrepancia` | El SRI tiene registrado con esta clave **otro** comprobante (por ejemplo, la versión anterior a una corrección que sí había llegado). `err` es un `*sri.ErrorDiscrepancia` | No entregar `res.XMLFirmado`. Ver qué tiene el SRI en `res.Autorizacion`: si está autorizado, ese es el comprobante válido (`res.Autorizacion.Comprobante`) y una corrección se hace con nota de crédito o de débito; si no lo está, enviar este documento con `Reanudar` (es seguro: si el SRI ya lo tiene en proceso, queda pendiente) |
+| `err != nil` | No hubo respuesta (red, tiempo agotado), o el SRI respondió algo que no permite saber el estado (`sri.ErrEstadoIndeterminado`, `sri.ErrRespuestaIncoherente`). **Estado desconocido** | Reintentar `Reanudar` con el **mismo** XML firmado, o consultar con `ConsultarDocumento`. No generar otra clave ni otro secuencial |
+
+Un estado de autorización vacío o que el SDK no conoce no se convierte en `NO AUTORIZADO`: queda `EstadoRecibido` con `sri.ErrEstadoIndeterminado`, para que la aplicación no emita otro comprobante mientras el original puede seguir en curso.
+
+**Corregir y reenviar.** Para corregir un comprobante devuelto o no autorizado, cambie los datos, llame a `Calcular()` **sin** volver a generar la clave (conserve `InfoTributaria.ClaveAcceso`) y vuelva a `Preparar` y `Reanudar`. Si la corrección cambia la fecha de emisión, la clave deja de corresponder (regla `clave.coherencia`). El SDK compara lo que el SRI devuelve con el XML enviado: mientras el SRI procesa la corrección, el `NO AUTORIZADO` de la versión anterior no se toma como resultado (queda `EstadoRecibido`), y si el SRI conserva otra versión **autorizada** con esa clave, el resultado es `EstadoDiscrepancia` y no un falso `AUTORIZADO`.
 
 Antes de enviar, `Preparar` puede devolver `*sri.ErrorValidacion`: el comprobante incumple una regla local y no se firmó. Sus `Hallazgos` dicen el campo, la regla y el motivo. Las `Advertencias` no impiden emitir, pero conviene registrarlas.
 
@@ -91,9 +96,9 @@ Antes de enviar, `Preparar` puede devolver `*sri.ErrorValidacion`: el comprobant
 
 1. **Nunca use `float64` para importes.** Use `decimal.Decimal` (`decimal.MustParse("12.50")`). El SRI rechaza diferencias de un centavo (error 52).
 2. **Llame a `Calcular()` después del último cambio** y antes de `GenerarClaveAcceso`. Si cambia una línea, vuelva a calcular.
-3. **Una clave de acceso por comprobante, generada una vez y guardada.** Un reintento por fallo de red reutiliza la misma clave y el mismo XML firmado. El SDK reconoce las respuestas «clave ya registrada» (43) y «en procesamiento» (70) y continúa con la consulta.
+3. **Una clave de acceso por comprobante, generada una vez y guardada.** Un reintento por fallo de red reutiliza la misma clave y el mismo XML firmado. El SDK reconoce las respuestas «clave ya registrada» (43) y «en procesamiento» (70), continúa con la consulta y comprueba que el comprobante autorizado sea el que envió.
 4. **Guarde el XML firmado antes de enviarlo** y el XML autorizado después. Sin el firmado no puede reanudar con seguridad.
-5. **El secuencial es suyo.** Resérvelo de forma atómica (transacción o secuencia de base de datos). Un secuencial cuyo comprobante quedó `DEVUELTO` o `NO AUTORIZADO` puede reutilizarse con una clave nueva; uno `AUTORIZADO`, nunca.
+5. **El secuencial es suyo.** Resérvelo de forma atómica (transacción o secuencia de base de datos). Un comprobante `DEVUELTO` o `NO AUTORIZADO` se corrige y se reenvía con su misma clave y su mismo secuencial (ficha 5.10); uno `AUTORIZADO` no se vuelve a emitir.
 6. **Use `comprobante.Hoy()` para la fecha de emisión.** Es la fecha de Ecuador (UTC−5); la del servidor puede ser «mañana» y el SRI rechaza fechas futuras.
 7. **No modifique el XML después de firmarlo**, ni lo reformatee, ni le añada espacios: invalida la firma (error 39).
 8. **Los textos no llevan saltos de línea ni espacios al inicio o al final.** El SDK lo valida; limpie los datos de entrada.
@@ -138,7 +143,7 @@ Receptores: notas de crédito y débito, retenciones y liquidaciones exigen iden
 |---|---|---|---|
 | 35 | Archivo no cumple estructura XML | Campo fuera de formato u orden | No debería ocurrir si no se usa `OmitirXSD`; revise datos con saltos de línea o caracteres extraños |
 | 39 | Firma inválida | XML alterado tras firmar, certificado revocado o no vigente | Enviar exactamente `prep.XMLFirmado`; revisar el certificado |
-| 43 | Clave de acceso registrada | Reenvío de algo ya recibido | El SDK lo trata como recibido y consulta la autorización |
+| 43 | Clave de acceso registrada | Reenvío de algo ya recibido | El SDK lo trata como recibido, consulta la autorización y compara el documento; si el SRI tiene otro, devuelve `EstadoDiscrepancia` |
 | 45 | Secuencial registrado | Secuencial repetido con otra clave | Corregir la numeración |
 | 52 | Error en diferencias | Totales, tarifas o códigos que no coinciden con los del SRI | Usar `Calcular()`; revisar catálogos (retenciones, países) |
 | 56 / 57 | Establecimiento cerrado / autorización suspendida | Situación del RUC | Regularizar en el SRI |
@@ -179,8 +184,8 @@ El SDK incluye copias de catálogos del SRI (porcentajes de retención, tarifas 
 - [ ] Importes con `decimal.Decimal` de extremo a extremo (también en la base de datos: texto o `NUMERIC`, no `FLOAT`).
 - [ ] Secuenciales reservados de forma atómica, por tipo, establecimiento y punto de emisión.
 - [ ] Clave de acceso y XML firmado guardados antes de enviar.
-- [ ] Los cinco resultados de la sección 5 tratados, incluido el fallo de red.
-- [ ] Tarea periódica que consulta los comprobantes en `RECIBIDO` con `cliente.Autorizar`.
+- [ ] Los seis resultados de la sección 5 tratados, incluidos el fallo de red, el estado indeterminado y la discrepancia.
+- [ ] Tarea periódica que consulta los comprobantes en `RECIBIDO` con `cliente.ConsultarDocumento`.
 - [ ] XML autorizado guardado y entregado al receptor.
 - [ ] Ambiente y certificado por configuración, sin secretos en el repositorio.
 - [ ] Pruebas automáticas con `sritest` y una ronda en el ambiente de pruebas del SRI.
