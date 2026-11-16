@@ -57,7 +57,10 @@ Respuesta: `RespuestaAutorizacionComprobante` con `claveAccesoConsultada`, `nume
 A tener en cuenta, según la definición del servicio (no observado en las pruebas):
 
 - Mientras el SRI procesa, la respuesta puede llegar sin autorizaciones: hay que volver a consultar.
-- La respuesta admite varias autorizaciones para una misma clave (por ejemplo, un intento no autorizado y otro autorizado): busque la que esté en `AUTORIZADO`.
+- La respuesta admite varias autorizaciones para una misma clave (por ejemplo, un intento no autorizado y otro autorizado): busque la que esté en `AUTORIZADO`. Según la sección 5.11, si el comprobante fue no autorizado varias veces, el servicio devuelve solo el último estado.
+- La Tabla 6 nombra los estados con siglas (PPR en procesamiento, AUT autorizado, NAT no autorizado) y el ejemplo de la sección 7.2.3 usa `RECHAZADO` para un no autorizado. Un estado vacío o distinto de estos no permite saber qué pasó: trátelo como desconocido, nunca como rechazo, o una aplicación podría emitir otro comprobante mientras el original sigue en curso.
+
+**Contraste con la consulta.** Compruebe que `claveAccesoConsultada`, la clave del comprobante devuelto y el `ambiente` correspondan a lo que se consultó, y que el comprobante devuelto sea, en contenido, el que se envió. Lo segundo importa porque el emisor debe corregir y reenviar un comprobante rechazado **con la misma clave** (sección 5.10): si un envío anterior de resultado incierto sí llegó, el SRI puede tener otra versión con esa clave y responder por ella. **Decisión de este SDK:** comparar el SHA-256 de la forma canónica de los dos comprobantes sin su firma (lo que cubre la referencia `#comprobante`), que no cambia con la serialización y sí con cualquier cambio de contenido; si difieren, el resultado es una discrepancia y no una autorización. Excepción: si la recepción acaba de aceptar el documento (RECIBIDA o 70), un `NO AUTORIZADO` de otra versión es el resultado anterior a la corrección y se sigue esperando el del documento nuevo.
 
 El documento que el emisor debe conservar y entregar al receptor es el comprobante firmado junto con su autorización. **Decisión de este SDK:** componerlo como un elemento `<autorizacion>` con `estado`, `numeroAutorizacion`, `fechaAutorizacion`, `ambiente` y el comprobante en CDATA, que es el formato habitual de intercambio.
 
@@ -77,15 +80,17 @@ construir → validar (reglas + XSD) → firmar → [guardar] → validarComprob
 
 | Situación | Significado | Qué hacer |
 |---|---|---|
-| `DEVUELTA` | No pasó la recepción (estructura, clave, emisor) | Corregir y reemitir |
+| `DEVUELTA` | No pasó la recepción (estructura, clave, emisor) | Corregir y reenviar con la misma clave y secuencial (5.10) |
 | `RECIBIDA` sin autorización todavía | Pendiente | Consultar más tarde; no reemitir |
-| `NO AUTORIZADO` | No pasó la autorización (firma, diferencias de cálculo) | Corregir y reemitir |
-| `AUTORIZADO` | Comprobante válido | Guardar y entregar |
+| `NO AUTORIZADO` | No pasó la autorización (firma, diferencias de cálculo) | Corregir y reenviar con la misma clave y secuencial (5.10) |
+| `AUTORIZADO` del mismo documento | Comprobante válido | Guardar y entregar |
+| `AUTORIZADO` u otro estado, pero de un documento distinto | Hay otra versión registrada con esa clave | No entregar el documento enviado; resolver con lo que tiene el SRI |
+| Estado vacío o desconocido; respuesta de otra clave u otro ambiente | **Estado desconocido** | Volver a consultar; no reemitir |
 | Sin respuesta (red, tiempo agotado) | **Estado desconocido** | Reintentar con el mismo documento firmado |
 
 ## Reintentos e idempotencia
 
-Reenviar un comprobante que el SRI ya recibió no lo duplica. El SRI responde `DEVUELTA` con uno de estos códigos, que **no son un rechazo del comprobante**:
+Reenviar un comprobante que el SRI ya recibió no lo duplica. El SRI responde `DEVUELTA` con uno de estos códigos, que **no son un rechazo del comprobante**, pero tampoco prueban que lo que tiene registrado sea el documento que se acaba de enviar (ver «Contraste con la consulta»):
 
 | Código | Mensaje | Qué hacer |
 |---|---|---|
@@ -94,7 +99,7 @@ Reenviar un comprobante que el SRI ya recibió no lo duplica. El SRI responde `D
 
 **Comprobado:** el 43, reenviando un comprobante ya autorizado. El 70 no se ha observado.
 
-**Decisión de este SDK:** reintentar automáticamente los fallos de red y los errores HTTP 5xx con espera creciente; tratar 43 y 70 como «ya recibido»; y consultar la autorización hasta seis veces en aproximadamente un minuto antes de devolver el comprobante como pendiente.
+**Decisión de este SDK:** reintentar automáticamente los fallos de red y los errores HTTP 5xx con espera creciente; tratar 43 y 70 como «ya recibido», comparando después el comprobante autorizado con el enviado; y consultar la autorización hasta seis veces en aproximadamente un minuto antes de devolver el comprobante como pendiente.
 
 ## Códigos frecuentes
 
