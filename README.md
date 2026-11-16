@@ -57,12 +57,13 @@ No es un SDK teórico: se comprobó enviando comprobantes al **ambiente de prueb
 | Guía de remisión v1.0.0 y 1.1.0 | **AUTORIZADO** |
 | Liquidación de compra v1.0.0 y 1.1.0 | **AUTORIZADO** |
 | Envío por lotes | Recibido; resultado por comprobante |
-| Manejo de respuestas (reenvío de un comprobante ya autorizado, firma alterada, XML fuera de esquema) | El SDK interpreta correctamente los códigos del SRI (43, 39, 35) |
+| Manejo de respuestas (reenvío del mismo comprobante ya autorizado, firma alterada, XML fuera de esquema) | El SDK interpreta los códigos del SRI (43, 39, 35); al reenviar, comprueba que el autorizado sea el documento enviado |
 
 Además:
 
 - Los comprobantes que devuelve el SRI son idénticos, byte a byte, a los enviados.
-- Las firmas se verificaron también con una herramienta independiente (`xmlsec1`) y la validación XSD se contrastó con `xmllint`.
+- Las firmas se verifican con una herramienta independiente (`xmlsec1`), y la canonicalización y la validación XSD se contrastan con `xmllint` (libxml2), en cada cambio, en la integración continua.
+- Una auditoría independiente de la versión 0.1.0 encontró validaciones de importes que dejaban pasar comprobantes incoherentes y respuestas del SRI mal interpretadas en casos límite; la versión 0.2.0 corrige cada hallazgo con una prueba de regresión. Ver [docs/auditoria-v0.1.0.md](docs/auditoria-v0.1.0.md).
 - Los RIDE en PDF se abrieron con dos visores independientes y su código de barras se leyó con un lector (`zbar`).
 - El correo de entrega, con XML y RIDE adjuntos, llegó a la bandeja de entrada por un servidor SMTP real.
 
@@ -72,7 +73,8 @@ El detalle, con las condiciones de las pruebas, está en [docs/pruebas-sri.md](d
 
 - **Solo el ambiente de pruebas, un emisor y un certificado** (Banco Central del Ecuador). No se ha enviado nada a producción ni se han probado certificados de otras entidades.
 - **La devolución automática de IVA (servicios DIG) no está implementada.** El SDK rechaza un `valorDevolucionIva` mayor que cero para no emitir importes incorrectos. La investigación está en [docs/devolucion-iva-dig.md](docs/devolucion-iva-dig.md).
-- **Algunos casos solo tienen pruebas locales:** ICE e IRBPNR, factura comercial negociable, retenciones al exterior, entre otros.
+- **Algunos casos solo tienen pruebas locales:** ICE e IRBPNR, factura comercial negociable, retenciones al exterior, entre otros. También las reglas de coherencia de importes añadidas en la versión 0.2.0, que no se han contrastado con el SRI.
+- **La validación revisa la coherencia del comprobante, no la ley aplicable:** no sabe qué tarifa de IVA o qué retención corresponde a cada bien o pago, y solo contrasta una nota de crédito o una retención con su documento de origen en la medida en que lo conoce.
 - **Los catálogos caducan.** Antes de adoptarlo, compruebe en <https://www.sri.gob.ec/facturacion-electronica> si hay una ficha posterior a la 2.34 y revise [docs/actualizar-catalogos.md](docs/actualizar-catalogos.md).
 - El SDK no asigna secuenciales, no guarda comprobantes y no sustituye el criterio tributario.
 

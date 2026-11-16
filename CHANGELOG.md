@@ -6,6 +6,49 @@ Los cambios notables de cada versión. El formato sigue [Keep a Changelog](https
 
 - Documentación: política de versiones (`docs/versionado.md`).
 
+## v0.2.0 — sin publicar
+
+Corrige los hallazgos de una auditoría adversarial independiente de la v0.1.0. El detalle de cada hallazgo, la prueba que lo protege y lo que sigue abierto están en [`docs/auditoria-v0.1.0.md`](docs/auditoria-v0.1.0.md). Sigue basada en la ficha técnica v2.34.
+
+### Cambios incompatibles
+
+Comprobantes que la v0.1.0 firmaba ahora se rechazan o cambian de estado. Las reglas forman parte de la API ([`docs/versionado.md`](docs/versionado.md)).
+
+- **Nuevos errores de validación** (impiden `Preparar`): `iva.base` (la base del IVA de una línea debe ser su total más su ICE), `iva.unico` (un solo IVA por detalle), `totales.tarifa` (tarifa del `totalImpuesto` distinta de la de los detalles), `caracter-invalido` (caracteres que XML 1.0 no admite) y, en las notas de crédito asociadas a su factura, `origen.*`. Cómo adaptarse: usar `Calcular`, que ya producía importes correctos; para documentos de otros sistemas, corregir los importes.
+- **Redondeo más estricto:** `iva.valor`, `retencion.valor` y el IVA del sustento ya no admiten un centavo de diferencia, solo el redondeo al centavo más cercano (±0,005).
+- **Estados de autorización:** un estado vacío o desconocido ya no es `EstadoNoAutorizado` sino `EstadoRecibido` con `ErrEstadoIndeterminado`; una respuesta de otra clave u otro ambiente devuelve `ErrRespuestaIncoherente`; una recepción sin estado ya no es `EstadoDevuelto` sino un error `ErrEstadoIndeterminado`. Cómo adaptarse: tratar esos errores como estado desconocido y reintentar con el mismo XML.
+- **Nuevo estado `EstadoDiscrepancia`** (al final de la enumeración: los valores anteriores no cambian), con `*ErrorDiscrepancia`: el SRI tiene otro comprobante registrado con la misma clave. Un `switch` sobre `Estado` debe contemplarlo.
+- **`Parse` de todos los comprobantes** rechaza ahora DOCTYPE, atributos repetidos y documentos que superen los límites del analizador de firmas, y normaliza los valores de atributo según XML 1.0.
+- `sri.Nuevo` rechaza un `Certificado` sin clave privada; `ws.Lote.XML` exige un RUC válido; `ride.Generar` marca como vista previa lo que no viene con la autorización ni con `Opciones.FechaAutorizacion`, y rechaza logotipos de más de 25 megapíxeles.
+
+### Añadido
+
+- `sri.Cliente.ConsultarDocumento`: consulta la autorización de un XML firmado y comprueba que el autorizado sea ese documento. `Resultado.Verificado`.
+- `xades.Huella`: SHA-256 de la forma canónica de un comprobante sin su firma.
+- `notacredito.NotaCredito.AsociarFactura` y `ValidarContra`; `DesdeFactura` asocia la factura.
+- `retencion.OpcionesValidacion.SustentoEstricto` y las reglas `retencion.base-iva`, `retencion.base-renta` y `sustento.base-iva` (advertencias).
+- Advertencias `iva.ausente`, `iva.vigencia` (tarifas generales de IVA fuera de su vigencia legal) y `propina.limite`.
+- `comprobante.ImporteRedondeado`, `Validador.ImpuestosDetalle`, `Validador.VigenciaIVA`, `IVAVigente`, `CaracterInvalido`, `Deserializar`, `TarifaIVADe`, `FormaPagoDe`, `PaisDe`; `factura.VigenciaDetalles`; `certificado.Certificado.Utilizable`; `ws.Autorizacion.NoAutorizado`.
+- CI: `govulncheck` y `go mod verify` (también semanal), contraste con `xmlsec1` y `xmllint` (`internal/interop`), fuzzing breve del analizador XML y acciones fijadas por SHA.
+
+### Corregido
+
+- El validador aceptaba una línea de 100,00 con IVA declarado de 0,15, dos IVA por línea, un centavo de más por línea acumulado en el total y una tarifa del total incoherente (AUD-001, AUD-003, AUD-010).
+- Reenviar con la misma clave un comprobante distinto terminaba en AUTORIZADO con el XML de otro documento (AUD-002). Una corrección reenviada con la misma clave según la ficha (5.10) queda pendiente mientras el SRI solo muestra el NO AUTORIZADO de la versión anterior.
+- `retencion.Calcular` calculaba el IVA del sustento sobre la base sin redondear.
+- Retenciones con bases mayores que el sustento y notas de crédito mayores que la factura pasaban sin hallazgos (AUD-004).
+- `XMLAutorizado` no escapaba los campos de la autorización (AUD-006).
+- Firmar con un certificado sin clave provocaba un pánico (AUD-007).
+- Un atributo con un salto de línea literal daba una firma válida para el SDK e inválida para `xmlsec1` (AUD-008).
+- Los caracteres de control se sustituían en silencio por U+FFFD (AUD-009).
+- El RIDE de vista previa era indistinguible de uno válido (AUD-013).
+- Los catálogos exportados podían modificarse y alterar la validación de todo el proceso; `sri.Espera` sin intervalo consultaba en ráfaga.
+- La guía de integración decía que un comprobante rechazado se vuelve a emitir con otra clave; la ficha (5.10) exige la misma clave y el mismo secuencial.
+
+### Limitaciones
+
+Las de la v0.1.0 siguen vigentes. Las reglas nuevas no rechazan ninguno de los 24 comprobantes que el SRI ya autorizó, pero no se han enviado al ambiente de pruebas casos que las incumplan (pendiente 15): podrían ser más laxas que el SRI en algún caso.
+
 ## v0.1.0 — primera versión pública (pre-release) — 2026-11-15
 
 Primera versión utilizable del SDK. Es una versión previa a la 1.0: funciona y está probada contra el ambiente de pruebas del SRI, pero la API puede cambiar y hay casos sin verificar, que se declaran abajo.

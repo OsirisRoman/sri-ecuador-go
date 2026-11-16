@@ -16,6 +16,7 @@ La documentación oficial del SRI conserva la autoridad normativa; aquí se expl
 |---|---|
 | [Capacidades y estado](capacidades.md) | Qué hace cada parte, con qué respaldo y qué límites |
 | [Pruebas contra el SRI](pruebas-sri.md) | Qué autorizó el SRI, en qué condiciones, y qué no se ha probado |
+| [Auditoría de v0.1.0](auditoria-v0.1.0.md) | Hallazgos de una auditoría independiente y cómo se resolvió cada uno |
 | [Notas de versión](../CHANGELOG.md) | Cambios de cada versión |
 | [Política de versiones](versionado.md) | Qué puede cambiar entre versiones y cómo se publican |
 

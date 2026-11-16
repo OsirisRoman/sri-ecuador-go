@@ -41,7 +41,10 @@ Todos comparten la misma forma de uso: llenar la estructura, `Calcular()`, `Gene
 | Clave de acceso: generar, analizar, validar | `clave` | ✅ | Sección 5.2, Tabla 1 | Claves impresas en la ficha; vectores; todas las claves de las pruebas aceptadas por el SRI | — |
 | Decimales exactos y redondeo | `decimal` | ✅ | Evita el código 52 | Vectores de cálculo; facturas autorizadas con 6 decimales | — |
 | Cálculo de totales | cada comprobante | ✅ | Anexos | Vectores; sin código 52 en las pruebas | Tarifas específicas de ICE: las indica el usuario |
-| Reglas de validación | cada comprobante | ✅ / 🧪 | Ficha y XSD | Una prueba por regla; tabla en [`referencia/calculo-y-validacion.md`](referencia/calculo-y-validacion.md) | Las de catálogos que caducan son advertencias |
+| Reglas de validación (forma, aritmética, catálogos, clave) | cada comprobante | ✅ | Ficha y XSD | Una prueba por regla; tabla en [`referencia/calculo-y-validacion.md`](referencia/calculo-y-validacion.md) | Las de catálogos que caducan son advertencias |
+| Reglas de coherencia de importes: base del IVA por línea, un IVA por detalle, redondeo sin tolerancia acumulable, tarifa del total | cada comprobante | 🧪 | Ficha (Tablas 17 y 18, sección 11) y art. 58 LRTI | Pruebas con documentos coherentes pero incorrectos, que fallaban en v0.1.0 | No contrastadas con el SRI (pendiente 15). No validan el valor del ICE ni del IRBPNR |
+| Coherencia con el documento de origen | `retencion`, `notacredito` | 🚧 | Coherencia | Pruebas locales | Retención 2.0.0: advertencias (errores con `SustentoEstricto`); la 1.0.0 no declara el sustento. Nota de crédito: solo si se conoce la factura (`DesdeFactura`, `AsociarFactura`) y las notas anteriores que pase la aplicación |
+| Advertencias de vigencia de tarifa y de propina | `factura`, `liquidacion` | 🧪 | Ley; sección 9.16 | Pruebas locales | Solo las tarifas generales de IVA; fechas que caducan |
 | Validación XSD | `esquema` | ✅ | XSD oficiales, incrustados sin modificar | Mismo veredicto que `xmllint` en los 13 ejemplos del SRI; el SRI devuelve con el código 35 lo que el SDK rechaza | Un ajuste documentado (RIMPE negocio popular) sin confirmar |
 | Catálogos (IVA, pagos, países, retenciones) | `comprobante`, `retencion` | ✅ / 🧪 | Tablas de la ficha; Catálogo ATS | Generados desde la fuente oficial | **Caducan**: ver [`actualizar-catalogos.md`](actualizar-catalogos.md) |
 
@@ -50,15 +53,16 @@ Todos comparten la misma forma de uso: llenar la estructura, `Calcular()`, `Gene
 | Capacidad | Paquete | Estado | Requisito del SRI | Respaldo | Límites |
 |---|---|---|---|---|---|
 | Carga de certificados `.p12` | `certificado` | ✅ | Sección 6 | Certificado real del Banco Central del Ecuador | Sin tokens ni HSM (pendiente 10) |
-| Firma XAdES-BES, RSA-SHA256 y RSA-SHA1 | `xades` | ✅ | Sección 6, Anexo 14 | Ambos algoritmos autorizados; verificación independiente con `xmlsec1`; vectores | Un solo certificado probado (pendiente 3) |
-| Verificación de firma | `xades` | 🧪 | — | Detecta alteraciones que el SRI también rechaza (código 39) | Sin revocación (pendiente 9) |
+| Firma XAdES-BES, RSA-SHA256 y RSA-SHA1 | `xades` | ✅ | Sección 6, Anexo 14 | Ambos algoritmos autorizados; en cada cambio, verificada con `xmlsec1` (1.2 y 1.3) y canonicalización igual a la de libxml2 (CI, `internal/interop`); vectores | Un solo certificado probado (pendiente 3) |
+| Verificación de firma | `xades` | 🧪 | — | Detecta alteraciones que el SRI también rechaza (código 39); coincide con `xmlsec1` en atributos con saltos de línea literales | Sin revocación (pendiente 9) |
 
 ## Comunicación con el SRI
 
 | Capacidad | Paquete | Estado | Requisito del SRI | Respaldo | Límites |
 |---|---|---|---|---|---|
 | Recepción y autorización | `ws`, `sri` | ✅ | Sección 7 | Todas las emisiones de las pruebas | — |
-| Reintentos e idempotencia | `ws`, `sri` | ✅ | Sección 5.10 | Código 43 comprobado; cortes de red simulados | Código 70 no observado |
+| Reintentos e idempotencia del mismo documento | `ws`, `sri` | ✅ | Sección 5.10 | Código 43 comprobado; cortes de red simulados | Código 70 no observado |
+| Contraste del autorizado con lo enviado (`EstadoDiscrepancia`) y estados inciertos | `sri` | 🧪 | Secciones 5.10, 5.11 y Tabla 6 | Simulador y servidores SOAP anómalos | El reenvío corregido con la misma clave no se ha observado en el SRI real (pendiente 15) |
 | Consulta de validez | `ws` | ✅ | Sección 8 | Comprobante autorizado | Estados de anulación no observados |
 | Consulta de factura comercial negociable | `ws` | 🚧 | Sección 8 | Respuesta negativa comprobada | Respuesta afirmativa sin comprobar |
 | Envío por lotes | `ws` | ✅ | Sección 7.5, Tabla 8 | Dos lotes de facturas | Sin flujo de alto nivel (pendiente 8) |
@@ -69,7 +73,7 @@ Todos comparten la misma forma de uso: llenar la estructura, `Calcular()`, `Gene
 
 | Capacidad | Paquete | Estado | Requisito del SRI | Respaldo | Límites |
 |---|---|---|---|---|---|
-| RIDE en PDF de todos los comprobantes | `ride` | 🧪 | Anexo 2; secciones 9.19 y 9.20 | Dos visores independientes; código de barras leído con `zbar` | No es algo que valide el SRI. Sin fuentes incrustadas ni PDF/A; caracteres fuera de Windows-1252 se sustituyen (pendiente 13) |
+| RIDE en PDF de todos los comprobantes | `ride` | 🧪 | Anexo 2; secciones 9.19 y 9.20 | Dos visores independientes; código de barras leído con `zbar` | No es algo que valide el SRI. Lo que no consta como autorizado se marca como vista previa. Sin fuentes incrustadas ni PDF/A; caracteres fuera de Windows-1252 se sustituyen (pendiente 13) |
 | Correo de entrega (XML y RIDE) | `correo` | 🧪 | — | Servidor SMTP real con STARTTLS; recibido en la bandeja de entrada | Opcional; la entregabilidad depende del remitente |
 | Línea de comandos | `cmd/sri` | 🧪 | — | Usada en las pruebas | Opera solo contra el ambiente de pruebas |
 
@@ -78,4 +82,5 @@ Todos comparten la misma forma de uso: llenar la estructura, `Calcular()`, `Gene
 - **Evidencia limitada a un emisor, un certificado y el ambiente de pruebas.** Producción y otras entidades de certificación no están comprobadas.
 - **La normativa cambia.** Los catálogos y los XSD incluidos corresponden a la ficha v2.34; una versión posterior puede exigir actualizarlos.
 - **Versión previa a la 1.0.** La API puede cambiar entre versiones menores.
-- **El SDK no sustituye el criterio tributario** ni garantiza la autorización: valida la coherencia del comprobante, no la correcta aplicación de la ley a cada operación.
+- **El SDK no sustituye el criterio tributario** ni garantiza la autorización: valida la coherencia interna del comprobante y, cuando la conoce, con su documento de origen; no la correcta aplicación de la ley a cada operación (qué tarifa corresponde a un bien, qué retención a un pago).
+- **Reglas sin contrastar con el SRI.** Las reglas añadidas tras la auditoría de v0.1.0 ([`auditoria-v0.1.0.md`](auditoria-v0.1.0.md)) podrían ser más estrictas o más laxas que el SRI en algún caso (pendiente 15).

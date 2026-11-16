@@ -87,4 +87,5 @@ Que un servidor acepte el mensaje no garantiza la llegada a la bandeja de entrad
 - **Liquidación de compra:** reembolsos, proveedores del exterior y liquidación negociable.
 - **Lotes:** otros tipos de comprobante o mezclados, el máximo de 50, y un comprobante que incumpla el XSD dentro de un lote (el simulador responde con el código 35 por comprobante; es una suposición).
 - Un comprobante en procesamiento prolongado y el código 70.
+- **Reglas añadidas en 0.2.0** (base del IVA por línea, un IVA por detalle, redondeo, coherencia con el documento de origen) y **reenvío de un comprobante corregido con la misma clave**: no se han enviado casos al SRI. Sí se aplicaron a los 24 comprobantes ya autorizados, sin ningún hallazgo nuevo, y la huella de cada comprobante enviado coincide con la del que devolvió el SRI; ver el pendiente 15.
 - **RIDE:** impresión en papel y lectura del código con un lector físico.

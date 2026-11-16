@@ -10,7 +10,10 @@ Lo esencial, que no debes saltarte:
 
 - Importes con `decimal.Decimal`, nunca `float64`.
 - Orden: llenar la estructura → `Calcular()` → `GenerarClaveAcceso("")` → `cliente.Preparar` → guardar clave y XML firmado → `cliente.Reanudar` → actuar según `res.Estado`.
-- Solo `sri.EstadoAutorizado` es un comprobante válido. `RECIBIDO` es pendiente; un error de red es estado desconocido y se reintenta con el **mismo** XML firmado, sin generar otra clave ni otro secuencial.
+- Solo `sri.EstadoAutorizado` es un comprobante válido. `RECIBIDO` es pendiente (se resuelve con `cliente.ConsultarDocumento`); un error de red o `sri.ErrEstadoIndeterminado` es estado desconocido y se reintenta con el **mismo** XML firmado, sin generar otra clave ni otro secuencial.
+- `sri.EstadoDiscrepancia` (`errors.Is(err, sri.ErrDiscrepancia)`) significa que el SRI tiene **otro** comprobante con esa clave: no entregues el XML enviado; el del SRI está en `res.Autorizacion`.
+- Un comprobante devuelto o no autorizado se corrige y se reenvía con la **misma** clave y el mismo secuencial (ficha 5.10): no vuelvas a llamar a `GenerarClaveAcceso`.
+- `Validar` (y `Preparar`) rechaza importes incoherentes aunque no vengan de `Calcular`; para una nota de crédito, usa `DesdeFactura` o `AsociarFactura` para que se contraste con su factura.
 - El secuencial lo asigna y lo guarda la aplicación, no el SDK.
 - Fecha de emisión con `comprobante.Hoy()` (hora de Ecuador).
 - Nunca envíes a producción (`comprobante.Produccion`) sin que la persona responsable lo pida expresamente; desarrolla contra `sritest` o el ambiente de pruebas.
@@ -20,6 +23,8 @@ Lo esencial, que no debes saltarte:
 - Para pruebas automáticas use `sritest.Nuevo()` y `sritest.CertificadoDePrueba()`.
 
 ## Si vas a MODIFICAR el SDK
+
+Las pruebas de `internal/interop` contrastan la firma con `xmlsec1` y la canonicalización y el XSD con `xmllint`; se omiten si no están instalados (`SRI_INTEROP=1` las hace obligatorias, como en el CI).
 
 ```sh
 go build ./... && go vet ./... && go test -race ./...

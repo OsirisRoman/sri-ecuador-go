@@ -20,7 +20,8 @@ El SDK:
 - Rechaza documentos XML con DOCTYPE y limita su tamaño y profundidad.
 - Exige indicar el ambiente y se niega a enviar un comprobante de un ambiente por el cliente de otro.
 - Exige TLS en el envío de correo fuera de `localhost`.
-- No tiene dependencias con cgo y se analiza con `govulncheck`.
+- Lee los comprobantes (`Parse`) con el mismo analizador que verifica las firmas, que además rechaza atributos repetidos y normaliza los atributos como libxml2, para que lo que se lee sea lo que se verificó.
+- No tiene dependencias con cgo. La integración continua ejecuta `go mod verify` y `govulncheck` en cada cambio y cada semana, y contrasta la firma con `xmlsec1` y la canonicalización y el XSD con `xmllint`. Las acciones del CI están fijadas por SHA.
 
 Es responsabilidad de quien lo integra:
 
