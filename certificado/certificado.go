@@ -165,14 +165,42 @@ func coincide(c *x509.Certificate, k *rsa.PrivateKey) bool {
 
 // Firmante devuelve la clave privada como crypto.Signer. Es la única vía de
 // acceso a la clave: permite firmar pero no obtener sus bytes.
-func (c *Certificado) Firmante() crypto.Signer { return c.clave }
+//
+// Devuelve nil (una interfaz nil, comparable con == nil) si el Certificado
+// no tiene clave, por ejemplo un &Certificado{X509: …} construido a mano en
+// vez de con Cargar o DesdeClave.
+func (c *Certificado) Firmante() crypto.Signer {
+	if c == nil || c.clave == nil {
+		return nil
+	}
+	return c.clave
+}
 
-// ClavePublica devuelve la clave pública RSA del certificado.
-func (c *Certificado) ClavePublica() *rsa.PublicKey { return &c.clave.PublicKey }
+// Utilizable informa si el certificado tiene un X.509 y su clave privada,
+// es decir, si sirve para firmar. Devuelve ErrSinParDeFirma si no.
+func (c *Certificado) Utilizable() error {
+	if c == nil || c.X509 == nil || c.clave == nil || !coincide(c.X509, c.clave) {
+		return ErrSinParDeFirma
+	}
+	return nil
+}
+
+// ClavePublica devuelve la clave pública RSA del certificado, o nil si no
+// tiene clave.
+func (c *Certificado) ClavePublica() *rsa.PublicKey {
+	if c == nil || c.clave == nil {
+		return nil
+	}
+	return &c.clave.PublicKey
+}
 
 // Vigente comprueba que el certificado esté dentro de su período de validez
-// en el instante dado y que su clave tenga al menos 2048 bits.
+// en el instante dado y que su clave tenga al menos 2048 bits. Devuelve
+// ErrSinParDeFirma si el certificado no tiene X.509 o clave.
 func (c *Certificado) Vigente(en time.Time) error {
+	if err := c.Utilizable(); err != nil {
+		return err
+	}
 	if en.After(c.X509.NotAfter) {
 		return fmt.Errorf("%w el %s", ErrVencido, c.X509.NotAfter.Format("2006-01-02"))
 	}
@@ -208,13 +236,20 @@ var oidsRUC = []string{
 
 // Resumen describe el certificado sin exponer material privado.
 func (c *Certificado) Resumen() Resumen {
+	if c == nil || c.X509 == nil {
+		return Resumen{}
+	}
+	bits := 0
+	if c.clave != nil {
+		bits = c.clave.N.BitLen()
+	}
 	r := Resumen{
 		Titular: c.X509.Subject.CommonName,
 		Emisor:  c.X509.Issuer.CommonName,
 		Serie:   c.X509.SerialNumber.String(),
 		Desde:   c.X509.NotBefore,
 		Hasta:   c.X509.NotAfter,
-		BitsRSA: c.clave.N.BitLen(),
+		BitsRSA: bits,
 	}
 	for _, ext := range c.X509.Extensions {
 		id := ext.Id.String()

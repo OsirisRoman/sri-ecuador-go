@@ -139,7 +139,7 @@ func (g *GuiaRemision) XML() ([]byte, error) {
 // Parse lee una guía de remisión desde su XML, firmado o no.
 func Parse(doc []byte) (*GuiaRemision, error) {
 	var g GuiaRemision
-	if err := xml.Unmarshal(doc, &g); err != nil {
+	if err := comprobante.Deserializar(doc, &g); err != nil {
 		return nil, fmt.Errorf("guiaremision: XML ilegible: %w", err)
 	}
 	return &g, nil
