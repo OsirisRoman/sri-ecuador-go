@@ -164,15 +164,14 @@ Desde este proyecto no se ha enviado nada a producción, y el ambiente de prueba
 
 ## 15. Reglas de la auditoría de v0.1.0 frente al SRI
 
-**Estado.** La versión 0.2.0 añadió reglas de validación y de interpretación de respuestas a raíz de una auditoría independiente ([`auditoria-v0.1.0.md`](auditoria-v0.1.0.md)). Se basan en la ficha técnica y en la ley, y tienen pruebas locales y contra `xmlsec1` y libxml2. **Comprobado sin enviar nada:** no rechazan ninguno de los 24 comprobantes que el SRI ya había autorizado. **Sin comprobar:** que el SRI rechace los casos que ahora rechaza el SDK.
+**Estado.** La versión 0.2.0 añadió reglas de validación y de interpretación de respuestas a raíz de una auditoría independiente ([`auditoria-v0.1.0.md`](auditoria-v0.1.0.md)). Una ronda en el ambiente de pruebas del SRI con ese código confirmó: el rechazo de una base de IVA incoherente (52), que el SRI autoriza un detalle sin IVA y los dos criterios de redondeo del total, el reenvío corregido con la misma clave (5.10) y la respuesta a una clave desconocida ([`pruebas-sri.md`](pruebas-sri.md)).
 
-**Qué falta comprobar en el ambiente de pruebas.**
+**Qué falta.**
 
-- Que el SRI devuelve (código 52) una base de IVA que no es el total de la línea más su ICE, y qué hace con un detalle sin IVA (hoy, advertencia `iva.ausente`) y con dos IVA en un detalle.
-- Que acepta un total de IVA igual a la suma de las líneas cuando difiere de la base acumulada en más de un centavo (el SDK lo admite, decisión D5).
-- Qué responde la recepción al reenviar con la misma clave un comprobante **corregido** cuando la versión anterior quedó recibida, autorizada o no autorizada, y qué comprobante devuelve después la autorización. El SDK lo detecta como `EstadoDiscrepancia` comparando con lo que devuelve la autorización; falta observarlo en el SRI real.
-- Si el SRI contrasta una nota de crédito con su factura o una retención con su sustento.
+- **Decidir la tolerancia por línea.** El SRI autorizó un IVA de línea con un centavo de diferencia (0,16 sobre 1,00 al 15 %); el SDK lo rechaza (`iva.valor`, solo el redondeo al centavo más cercano). Hay que decidir si el SDK debe seguir siendo más estricto que el SRI, lo que protege del cobro de más pero rechaza documentos de otros sistemas que el SRI acepta, o admitir el centavo como advertencia.
+- Comprobar en el SRI `iva.unico` (dos IVA en un detalle) y `totales.tarifa`, y si contrasta una nota de crédito con su factura o una retención con su sustento.
+- Observar un estado intermedio real (`EN PROCESO`, código 70, o la autorización anterior mientras se procesa una corrección): el SRI resolvió todo antes de la primera consulta.
 
 **Qué no puede resolver el SDK.** Las notas de crédito anteriores sobre una misma factura (hay que pasarlas a `AsociarFactura`), los importes del sustento en la retención 1.0.0 (que no los declara) y las fechas de las tarifas que no son la general (`comprobante/vigencia.go`).
 
-**Terminado cuando:** cada punto tenga un resultado registrado en [`pruebas-sri.md`](pruebas-sri.md) y, si el SRI se comporta distinto, la regla se haya ajustado.
+**Terminado cuando:** se decida la tolerancia por línea y cada punto restante tenga un resultado en [`pruebas-sri.md`](pruebas-sri.md).

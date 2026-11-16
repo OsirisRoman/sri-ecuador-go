@@ -18,7 +18,7 @@ El SRI valida con bibliotecas Java. `pkix.Name.String()` de Go usa palabras clav
 Un entero de precisión arbitraria con escala. Sin dependencia externa porque solo hacen falta suma, resta, producto, porcentaje y redondeo. Redondeo «mitad hacia arriba».
 
 ## D5. Total de IVA sobre la base acumulada
-`Calcular` obtiene el IVA de cada grupo como `suma de bases × tarifa`, no como suma de los IVA de cada línea. `Validar` acepta ambos criterios, porque los dos son de uso corriente y difieren en centavos.
+`Calcular` obtiene el IVA de cada grupo como `suma de bases × tarifa`, no como suma de los IVA de cada línea. `Validar` acepta ambos criterios, porque los dos son de uso corriente y difieren en centavos. El SRI autoriza ambos (comprobado en la ronda de certificación de 0.2.0).
 
 ## D6. No se exige el dígito verificador del RUC
 El SRI asigna RUC que no cumplen el módulo 11 clásico; exigirlo rechazaría contribuyentes reales. Se valida forma y provincia. La cédula con dígito incorrecto es *advertencia*, igual que en el SRI (código 62).

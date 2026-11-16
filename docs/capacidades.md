@@ -26,7 +26,7 @@ Todos comparten la misma forma de uso: llenar la estructura, `Calcular()`, `Gene
 | Placa en combustibles y transporte | `factura` | 🧪 | Anexos 12, 16 y 25 | Pruebas locales | Son advertencias: el SDK no conoce la actividad del emisor |
 | Sustitutiva de guía, subsidios, retenciones informativas, máquina fiscal | `factura` | 🚧 | Anexos 6, 9 y 13; sección 10 | El modelo cumple el XSD | Sin reglas propias ni prueba con el SRI |
 | Nota de crédito 1.1.0 | `notacredito` | ✅ | Anexos 1 y 3 | Total y parcial autorizadas | — |
-| Nota de crédito 1.0.0 | `notacredito` | 🧪 | Anexo 1 | Cumple el XSD | Sin prueba con el SRI |
+| Nota de crédito 1.0.0 | `notacredito` | ✅ | Anexo 1 | Autorizada (devolución parcial) | Un solo caso |
 | Nota de débito 1.0.0 | `notadebito` | ✅ | Anexo 1 | Autorizada | — |
 | Comprobante de retención 2.0.0 (ATS) | `retencion` | ✅ | Anexo 10; Tablas 19 y 20 | Autorizado: renta e IVA, pago local | ISD, pagos al exterior, dividendos, banano y reembolsos: 🧪 |
 | Comprobante de retención 1.0.0 | `retencion` (`ComprobanteV1`) | ✅ | Anexo 1 | Autorizado | — |
@@ -42,7 +42,9 @@ Todos comparten la misma forma de uso: llenar la estructura, `Calcular()`, `Gene
 | Decimales exactos y redondeo | `decimal` | ✅ | Evita el código 52 | Vectores de cálculo; facturas autorizadas con 6 decimales | — |
 | Cálculo de totales | cada comprobante | ✅ | Anexos | Vectores; sin código 52 en las pruebas | Tarifas específicas de ICE: las indica el usuario |
 | Reglas de validación (forma, aritmética, catálogos, clave) | cada comprobante | ✅ | Ficha y XSD | Una prueba por regla; tabla en [`referencia/calculo-y-validacion.md`](referencia/calculo-y-validacion.md) | Las de catálogos que caducan son advertencias |
-| Reglas de coherencia de importes: base del IVA por línea, un IVA por detalle, redondeo sin tolerancia acumulable, tarifa del total | cada comprobante | 🧪 | Ficha (Tablas 17 y 18, sección 11) y art. 58 LRTI | Pruebas con documentos coherentes pero incorrectos, que fallaban en v0.1.0 | No contrastadas con el SRI (pendiente 15). No validan el valor del ICE ni del IRBPNR |
+| Base del IVA por línea (`iva.base`) | cada comprobante | ✅ | Tabla 18, art. 58 LRTI | El SRI rechaza con el código 52 la misma incoherencia; pruebas de regresión | — |
+| Redondeo del IVA de cada línea (`iva.valor`) y criterios del total | cada comprobante | 🚧 | Sección 11 (código 52) | El SRI autoriza la suma por líneas y el desempate mitad al par, como el SDK | **El SDK es más estricto que el SRI:** rechaza un centavo de diferencia por línea que el SRI autoriza (pendiente 15) |
+| Un IVA por detalle, tarifa del total, detalle sin IVA (advertencia) | cada comprobante | 🧪 | Tabla 17 | El SRI autoriza un detalle sin IVA, por eso es advertencia; lo demás, pruebas locales | No validan el valor del ICE ni del IRBPNR |
 | Coherencia con el documento de origen | `retencion`, `notacredito` | 🚧 | Coherencia | Pruebas locales | Retención 2.0.0: advertencias (errores con `SustentoEstricto`); la 1.0.0 no declara el sustento. Nota de crédito: solo si se conoce la factura (`DesdeFactura`, `AsociarFactura`) y las notas anteriores que pase la aplicación |
 | Advertencias de vigencia de tarifa y de propina | `factura`, `liquidacion` | 🧪 | Ley; sección 9.16 | Pruebas locales | Solo las tarifas generales de IVA; fechas que caducan |
 | Validación XSD | `esquema` | ✅ | XSD oficiales, incrustados sin modificar | Mismo veredicto que `xmllint` en los 13 ejemplos del SRI; el SRI devuelve con el código 35 lo que el SDK rechaza | Un ajuste documentado (RIMPE negocio popular) sin confirmar |
@@ -62,7 +64,7 @@ Todos comparten la misma forma de uso: llenar la estructura, `Calcular()`, `Gene
 |---|---|---|---|---|---|
 | Recepción y autorización | `ws`, `sri` | ✅ | Sección 7 | Todas las emisiones de las pruebas | — |
 | Reintentos e idempotencia del mismo documento | `ws`, `sri` | ✅ | Sección 5.10 | Código 43 comprobado; cortes de red simulados | Código 70 no observado |
-| Contraste del autorizado con lo enviado (`EstadoDiscrepancia`) y estados inciertos | `sri` | 🧪 | Secciones 5.10, 5.11 y Tabla 6 | Simulador y servidores SOAP anómalos | El reenvío corregido con la misma clave no se ha observado en el SRI real (pendiente 15) |
+| Contraste del autorizado con lo enviado y reenvío corregido con la misma clave | `sri` | ✅ | Secciones 5.10, 5.11 y Tabla 6 | En el SRI: corrección tras `NO AUTORIZADO` (52 y 39) autorizada y verificada; reenvío idéntico (43) verificado; huella coincidente en todas las respuestas | `EstadoDiscrepancia` y los estados intermedios solo con el simulador y servidores SOAP anómalos: el SRI no produjo ninguno |
 | Consulta de validez | `ws` | ✅ | Sección 8 | Comprobante autorizado | Estados de anulación no observados |
 | Consulta de factura comercial negociable | `ws` | 🚧 | Sección 8 | Respuesta negativa comprobada | Respuesta afirmativa sin comprobar |
 | Envío por lotes | `ws` | ✅ | Sección 7.5, Tabla 8 | Dos lotes de facturas | Sin flujo de alto nivel (pendiente 8) |

@@ -1,6 +1,6 @@
 # Pruebas de interoperabilidad
 
-Este documento resume qué se ha comprobado y en qué condiciones. Lo que no se ha probado se declara como tal. Resultados al **15 de noviembre de 2026**, con la ficha técnica v2.34.
+Este documento resume qué se ha comprobado y en qué condiciones. Lo que no se ha probado se declara como tal. Resultados al **15 de noviembre de 2026**, con la ficha técnica v2.34; la última ronda se hizo con el código de la versión 0.2.0 (commit `2e54f8f`).
 
 ## Condiciones
 
@@ -18,7 +18,7 @@ Todos los comprobantes pasaron antes la validación local (reglas, XSD y verific
 | Factura | 1.0.0, 1.1.0, 2.0.0, 2.1.0 | Consumidor final, comprador con RUC y con cédula; IVA 15 %, 5 %, 0 %, exento y no objeto; descuento; precios y cantidades con 6 decimales; propina; crédito con plazo; varias formas de pago; rubros de terceros; detalles e información adicionales con `ñ & " < > '` |
 | Factura de exportación (Anexo 4) | 1.1.0 | Comprador con identificación del exterior, incoterms, flete y seguro |
 | Factura de reembolso de gastos (Anexo 5) | 1.1.0 | Un comprobante reembolsado con dos tarifas de IVA |
-| Nota de crédito | 1.1.0 | Total y parcial, creadas con `notacredito.DesdeFactura` |
+| Nota de crédito | 1.0.0, 1.1.0 | Total y parcial, creadas con `notacredito.DesdeFactura`; una 1.0.0 asociada a su factura y a una nota anterior sobre ella (`AsociarFactura`) |
 | Nota de débito | 1.0.0 | Dos motivos, IVA 15 %, una forma de pago |
 | Comprobante de retención | 1.0.0, 2.0.0 | Retención de renta y de IVA sobre una factura; en la 2.0.0, un documento de sustento con pago local |
 | Guía de remisión | 1.0.0, 1.1.0 | Con factura de sustento y sin ella (traslado entre establecimientos); dos detalles |
@@ -38,6 +38,10 @@ Firma: el SRI autoriza tanto **RSA-SHA256** (valor por defecto del SDK) como **R
 | Comprobante alterado después de firmar | `RECIBIDA` y luego `NO AUTORIZADO`, código 39; el SDK lo reporta como no autorizado |
 | Comprobante que incumple el XSD (enviado sin la validación local) | `DEVUELTA`, código 35 |
 | Reenvío del comprobante correcto tras una devolución o un no autorizado | `AUTORIZADO` |
+| Reenvío corregido con la **misma clave y secuencial** (ficha 5.10) tras un `NO AUTORIZADO` (código 52 o 39) | La recepción responde `RECIBIDA` (no 43) y la autorización devuelve una sola autorización, la del documento corregido, desde la primera consulta: `AUTORIZADO`. `Reanudar` y `ConsultarDocumento` lo dan por autorizado y verificado |
+| Reenvío idéntico de un comprobante corregido ya autorizado | 43; el SDK obtiene `AUTORIZADO` verificado, sin discrepancia |
+| Consulta de una clave de acceso que nunca se envió | `numeroComprobantes` 0 y ninguna autorización, igual que un comprobante en proceso; el SDK lo deja como pendiente |
+| Respuestas de autorización | `claveAccesoConsultada` igual a la consultada y `ambiente` `PRUEBAS` en todas; el comprobante devuelto tiene la misma huella que el enviado en todos los casos |
 | Envío por lotes (`ws.Lote`) | Lote `RECIBIDA`; cada comprobante se resuelve por separado: en un lote con una factura válida y otra alterada, la primera quedó `AUTORIZADO` y la segunda `NO AUTORIZADO` |
 
 ## Comportamientos del SRI confirmados
@@ -53,6 +57,10 @@ Conviene conocerlos porque condicionan cómo se integra el SDK:
 - El importe total de una factura de exportación incluye flete y seguro, como lo calcula el SDK.
 - **Lotes:** el documento `<lote>` no lleva firma propia; su clave de acceso se compone con tipo de comprobante 01 y una serie que el emisor reserva para lotes.
 - La firma del SDK usa el prefijo `ds:`; se acepta también en los comprobantes cuyo XSD declara la firma con `ns1:`.
+- **Base del IVA de un detalle.** El SRI la recalcula: una base de 1,00 en una línea de 100,00 se rechaza con el código 52 («La base imponible del impuesto 1.0 no coincide con la calculada 100.0»). Es la regla `iva.base` del SDK.
+- **Detalle sin IVA.** Un detalle que solo lleva IRBPNR se autoriza; por eso `iva.ausente` es una advertencia.
+- **Redondeo del IVA.** El SRI autoriza el total de IVA calculado como suma de las líneas aunque difiera de la base acumulada (0,20 frente a 0,15 en diez líneas de 0,10) y el desempate «mitad al par» en cada línea. También autoriza un IVA de línea con **un centavo de diferencia** (0,16 sobre una base de 1,00 al 15 %), que el SDK rechaza (`iva.valor`): en ese punto el SDK es más estricto que el SRI.
+- **Clave desconocida y comprobante en proceso** reciben la misma respuesta de autorización (sin autorizaciones). Si el envío falló, el estado se resuelve reenviando con `Reanudar`, no consultando.
 
 ## Verificación independiente
 
@@ -81,11 +89,12 @@ Que un servidor acepte el mensaje no garantiza la llegada a la bandeja de entrad
 - **Otros certificados y emisores.** Solo un certificado (Banco Central del Ecuador) y un emisor (persona natural). Los certificados de otras entidades pueden tener emisores con atributos distintos en `X509IssuerName`.
 - **Factura:** ICE, IRBPNR, retenciones informativas, una factura confirmada como comercial negociable, sustitutiva de guía de remisión, combustibles y transporte comercial (sus reglas solo tienen pruebas locales). Tampoco la leyenda de negocio popular RIMPE, que requiere un emisor de ese régimen.
 - **Devolución automática de IVA (servicios DIG):** no está implementada ni se ha probado; ver `devolucion-iva-dig.md`. El SDK rechaza un `valorDevolucionIva` mayor que cero.
-- **Nota de crédito:** versión 1.0.0.
 - **Retención:** ISD, pagos al exterior, dividendos, compra de banano y reembolsos.
 - **Guía de remisión:** varios destinatarios, documento aduanero y emisión anterior al día del traslado.
 - **Liquidación de compra:** reembolsos, proveedores del exterior y liquidación negociable.
 - **Lotes:** otros tipos de comprobante o mezclados, el máximo de 50, y un comprobante que incumpla el XSD dentro de un lote (el simulador responde con el código 35 por comprobante; es una suposición).
 - Un comprobante en procesamiento prolongado y el código 70.
-- **Reglas añadidas en 0.2.0** (base del IVA por línea, un IVA por detalle, redondeo, coherencia con el documento de origen) y **reenvío de un comprobante corregido con la misma clave**: no se han enviado casos al SRI. Sí se aplicaron a los 24 comprobantes ya autorizados, sin ningún hallazgo nuevo, y la huella de cada comprobante enviado coincide con la del que devolvió el SRI; ver el pendiente 15.
+- **Nota de crédito:** versión 1.0.0 solo en un caso (devolución parcial de un bien con IVA 0 %).
+- **Reglas de 0.2.0 sin contrastar:** dos IVA en un detalle (`iva.unico`), tarifa del `totalImpuesto` (`totales.tarifa`), coherencia de retenciones y notas de crédito con su origen (si el SRI la comprueba) y caracteres no admitidos.
+- **Estados intermedios:** el SRI resolvió todos los comprobantes antes de la primera consulta, así que no se observaron `EN PROCESO`, `PPR` ni el lapso en que la autorización mostraría el resultado de la versión anterior de un comprobante corregido; el SDK lo maneja, pero solo está probado con el simulador.
 - **RIDE:** impresión en papel y lectura del código con un lector físico.

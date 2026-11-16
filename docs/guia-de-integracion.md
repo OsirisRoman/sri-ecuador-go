@@ -80,11 +80,11 @@ Un comprobante **solo existe tributariamente cuando está AUTORIZADO**. `RECIBID
 | `res.Estado` | Qué pasó | Qué hacer |
 |---|---|---|
 | `sri.EstadoAutorizado` | El SRI lo autorizó, y el documento que devolvió es el enviado (`res.Verificado`) | Guardar `res.XMLAutorizado()` (es el documento válido), generar el RIDE, entregar al receptor |
-| `sri.EstadoRecibido` | Aceptado para procesar, sin resultado todavía (`res.Pendiente()`) | Guardar como pendiente y consultar después con `cliente.ConsultarDocumento(ctx, xmlFirmado)`. No reemitir |
+| `sri.EstadoRecibido` | Aceptado para procesar, sin resultado todavía (`res.Pendiente()`) | Guardar como pendiente y consultar después con `cliente.ConsultarDocumento(ctx, xmlFirmado)` (la recepción ya está confirmada). No reemitir |
 | `sri.EstadoDevuelto` | La recepción lo rechazó (estructura, clave, emisor…) | Leer `res.Mensajes`, corregir y reenviar con la **misma** clave y el mismo secuencial (ficha 5.10) |
 | `sri.EstadoNoAutorizado` | Se recibió pero no se autorizó (firma, diferencias de cálculo…) | Leer `res.Mensajes`, corregir y reenviar con la **misma** clave y el mismo secuencial (ficha 5.10 y 5.12) |
 | `sri.EstadoDiscrepancia` | El SRI tiene registrado con esta clave **otro** comprobante (por ejemplo, la versión anterior a una corrección que sí había llegado). `err` es un `*sri.ErrorDiscrepancia` | No entregar `res.XMLFirmado`. Ver qué tiene el SRI en `res.Autorizacion`: si está autorizado, ese es el comprobante válido (`res.Autorizacion.Comprobante`) y una corrección se hace con nota de crédito o de débito; si no lo está, enviar este documento con `Reanudar` (es seguro: si el SRI ya lo tiene en proceso, queda pendiente) |
-| `err != nil` | No hubo respuesta (red, tiempo agotado), o el SRI respondió algo que no permite saber el estado (`sri.ErrEstadoIndeterminado`, `sri.ErrRespuestaIncoherente`). **Estado desconocido** | Reintentar `Reanudar` con el **mismo** XML firmado, o consultar con `ConsultarDocumento`. No generar otra clave ni otro secuencial |
+| `err != nil` | No hubo respuesta (red, tiempo agotado), o el SRI respondió algo que no permite saber el estado (`sri.ErrEstadoIndeterminado`, `sri.ErrRespuestaIncoherente`). **Estado desconocido** | Reintentar `Reanudar` con el **mismo** XML firmado. No generar otra clave ni otro secuencial. No basta con `ConsultarDocumento`: el SRI responde igual a una clave que nunca recibió que a una en proceso, de modo que un comprobante que no llegó quedaría como pendiente para siempre |
 
 Un estado de autorización vacío o que el SDK no conoce no se convierte en `NO AUTORIZADO`: queda `EstadoRecibido` con `sri.ErrEstadoIndeterminado`, para que la aplicación no emita otro comprobante mientras el original puede seguir en curso.
 
