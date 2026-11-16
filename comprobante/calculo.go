@@ -15,28 +15,42 @@ func TotalLinea(cantidad, precioUnitario, descuento decimal.Decimal) decimal.Dec
 }
 
 // CalcularImpuestos completa los impuestos de un detalle cuyo total sin
-// impuestos es total, modificando el slice recibido:
-//
-//   - ICE e IRBPNR: se respetan la base y el valor indicados; si faltan, la
-//     base es el total de la línea y el valor es base × tarifa.
-//   - IVA: la tarifa se toma de la Tabla 17 cuando el código la determina;
-//     la base es el total de la línea más el ICE de la misma línea, que
-//     integra la base imponible del IVA.
+// impuestos es total, modificando el slice recibido. Equivale a
+// RecalcularImpuestos sin total anterior.
 func CalcularImpuestos(total decimal.Decimal, impuestos []Impuesto) {
+	RecalcularImpuestos(decimal.Cero, total, impuestos)
+}
+
+// RecalcularImpuestos completa los impuestos de un detalle cuyo total sin
+// impuestos es total, modificando el slice recibido. anterior es el total
+// que tenía el detalle antes de este cálculo (cero si aún no lo tenía).
+//
+//   - IVA: se deduce siempre. La tarifa se toma de la Tabla 17 cuando el
+//     código la determina; la base es el total de la línea más el ICE de
+//     la misma línea, que integra la base imponible del IVA; el valor es
+//     base × tarifa.
+//   - ICE e IRBPNR: se deduce lo que la aplicación no indicó. Una base en
+//     cero pasa a ser el total de la línea; un valor en cero, con tarifa,
+//     pasa a ser base × tarifa %. Una base o un valor indicados se
+//     respetan: la base del ICE puede ser el precio de venta al público, y
+//     el valor puede tener un componente específico por unidad.
+//
+// Al recalcular, lo que dedujo el cálculo anterior se vuelve a deducir con
+// los datos actuales, y lo que indicó la aplicación se sigue respetando.
+// Cada Impuesto recuerda qué se dedujo de él; esa memoria se copia con el
+// valor, pero no se serializa. Un impuesto que no la tiene (leído de XML, o
+// construido con sus importes ya calculados) se considera deducido en lo que
+// coincide con la deducción: una base igual a anterior y un valor igual a
+// base × tarifa %. Para que Calcular deduzca un importe que antes se indicó,
+// basta ponerlo a cero.
+func RecalcularImpuestos(anterior, total decimal.Decimal, impuestos []Impuesto) {
 	ice := decimal.Cero
 	for j := range impuestos {
 		imp := &impuestos[j]
 		if imp.Codigo == ImpuestoIVA {
 			continue
 		}
-		if imp.BaseImponible.EsCero() {
-			imp.BaseImponible = total
-		}
-		imp.BaseImponible = imp.BaseImponible.Redondear(2)
-		if imp.Valor.EsCero() && !imp.Tarifa.EsCero() {
-			imp.Valor = imp.BaseImponible.Porcentaje(imp.Tarifa)
-		}
-		imp.Valor = imp.Valor.Redondear(2)
+		imp.derivado.Aplicar(anterior, total, imp.Tarifa, &imp.BaseImponible, &imp.Valor)
 		if imp.Codigo == ImpuestoICE {
 			ice = ice.Sumar(imp.Valor)
 		}
@@ -51,6 +65,17 @@ func CalcularImpuestos(total decimal.Decimal, impuestos []Impuesto) {
 		}
 		imp.BaseImponible = total.Sumar(ice).Redondear(2)
 		imp.Valor = imp.BaseImponible.Porcentaje(imp.Tarifa).Redondear(2)
+	}
+}
+
+// AsignarPagoUnico mantiene el total de un pago único igual al importe del
+// comprobante: si hay un solo pago y su total es cero o es anterior (el
+// importe que tenía el comprobante antes de este cálculo), se le asigna
+// importe. Un pago con otro total, o varios pagos, los indicó la
+// aplicación y no se tocan.
+func AsignarPagoUnico(pagos []Pago, anterior, importe decimal.Decimal) {
+	if len(pagos) == 1 && (pagos[0].Total.EsCero() || pagos[0].Total.Igual(anterior)) {
+		pagos[0].Total = importe
 	}
 }
 
@@ -119,7 +144,10 @@ func ImporteRedondeado(declarado, exacto decimal.Decimal) bool {
 }
 
 // Numero valida las facetas de un xsd:decimal del SRI: no negativo, con un
-// máximo de dígitos totales y de decimales.
+// máximo de dígitos totales y de decimales. Los dígitos se cuentan como
+// están escritos, que es más estricto que el XSD (cuyo totalDigits ignora
+// los ceros finales): una tarifa de ICE del 100 % se escribe «100», no
+// «100.00».
 func (v *Validador) Numero(campo string, d decimal.Decimal, totalDigitos, decimales int) {
 	if d.Signo() < 0 {
 		v.Errorf(campo, "negativo", "no puede ser negativo (%s)", d)
@@ -376,4 +404,49 @@ func (v *Validador) DevolucionIVA(campo string, valor *decimal.Decimal) {
 	if valor.Signo() > 0 {
 		v.Errorf(campo, "devolucion-iva.no-admitida", "la devolución automática del IVA (Anexo 20, servicios DIG) no está implementada: el SDK no descuenta este valor del importe total ni puede obtenerlo del SRI; omita el campo o use 0 (ver docs/devolucion-iva-dig.md)")
 	}
+}
+
+// Compensaciones valida un bloque <compensaciones>. Una compensación es una
+// rebaja de puntos porcentuales del IVA (descuento solidario de 2016-2017 y
+// devolución por medios electrónicos de pago): su valor es un porcentaje
+// (tarifa) de la base gravada con IVA y se resta del importe total. Como el
+// SDK resta del importe lo que se declare, se acota aquí:
+//
+//   - compensacion.codigo: el único código que admiten los XSD es 1.
+//   - compensacion.valor: el valor no puede superar base gravada × tarifa %.
+//   - compensacion.total: las compensaciones no pueden sumar más que el IVA
+//     del comprobante.
+//   - compensacion.historica (advertencia): la figura no está vigente y no
+//     se ha probado contra el SRI.
+//
+// totales son los impuestos totales del comprobante; campo, la ruta del
+// bloque (por ejemplo "infoFactura.compensaciones").
+func (v *Validador) Compensaciones(campo string, cs []Compensacion, totales []TotalImpuesto) {
+	if len(cs) == 0 {
+		return
+	}
+	gravada, iva := decimal.Cero, decimal.Cero
+	for _, t := range totales {
+		if t.Codigo == ImpuestoIVA && t.Valor.Signo() > 0 {
+			gravada = gravada.Sumar(t.BaseImponible)
+			iva = iva.Sumar(t.Valor)
+		}
+	}
+	suma := decimal.Cero
+	for i, c := range cs {
+		p := fmt.Sprintf("%s[%d].", campo, i)
+		if c.Codigo != "1" {
+			v.Errorf(p+"codigo", "compensacion.codigo", "código %q desconocido; el esquema solo admite 1", c.Codigo)
+		}
+		v.Numero(p+"tarifa", c.Tarifa, 4, 2)
+		v.Numero(p+"valor", c.Valor, 14, 2)
+		if tope := gravada.Porcentaje(c.Tarifa); c.Valor.Restar(tope).Cmp(medioCentavo) > 0 {
+			v.Errorf(p+"valor", "compensacion.valor", "es %s, más que la base gravada con IVA (%s) × %s %% = %s", c.Valor, gravada.Redondear(2), c.Tarifa, tope.Redondear(2))
+		}
+		suma = suma.Sumar(c.Valor)
+	}
+	if suma.Cmp(iva) > 0 {
+		v.Errorf(campo, "compensacion.total", "las compensaciones suman %s, más que el IVA del comprobante (%s)", suma.Redondear(2), iva.Redondear(2))
+	}
+	v.Advertirf(campo, "compensacion.historica", "las compensaciones (descuento solidario de IVA y devolución por medios electrónicos, 2016-2017) no están vigentes y no se han probado contra el SRI")
 }

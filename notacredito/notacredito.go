@@ -137,7 +137,9 @@ func LineaIVA(codigo, descripcion string, cantidad, precioUnitario decimal.Decim
 // comprobante modificado. Quedan por asignar el secuencial
 // (InfoTributaria.Secuencial), la fecha de emisión si no es hoy, y la clave
 // de acceso (GenerarClaveAcceso). Para una devolución parcial, ajuste los
-// Detalles y llame a Calcular.
+// Detalles y llame a Calcular: el IVA y el ICE que se dedujo del total de
+// cada línea se recalculan; un ICE específico o con base propia, y un
+// IRBPNR, se copian de la factura tal cual y debe ajustarlos la aplicación.
 //
 // La nota de crédito queda asociada a f (ver AsociarFactura): Validar
 // comprueba que no devuelva más de lo facturado. Si sobre la misma factura
@@ -168,8 +170,13 @@ func DesdeFactura(f *factura.Factura, motivo string) *NotaCredito {
 		n.Detalles = append(n.Detalles, Detalle{
 			CodigoInterno: d.CodigoPrincipal, CodigoAdicional: d.CodigoAuxiliar, Descripcion: d.Descripcion,
 			Cantidad: d.Cantidad, PrecioUnitario: d.PrecioUnitario, Descuento: d.Descuento,
-			DetallesAdicionales: append(comprobante.Lista[comprobante.DetAdicional](nil), d.DetallesAdicionales...),
-			Impuestos:           append(comprobante.Lista[comprobante.Impuesto](nil), d.Impuestos...),
+			// El total de la línea de la factura permite reconocer, al
+			// calcular, el ICE que se dedujo de él (ver
+			// comprobante.RecalcularImpuestos) aunque la factura se haya
+			// leído de XML.
+			PrecioTotalSinImpuesto: d.PrecioTotalSinImpuesto,
+			DetallesAdicionales:    append(comprobante.Lista[comprobante.DetAdicional](nil), d.DetallesAdicionales...),
+			Impuestos:              append(comprobante.Lista[comprobante.Impuesto](nil), d.Impuestos...),
 		})
 	}
 	n.Calcular()
@@ -188,14 +195,16 @@ func (n *NotaCredito) impuestosPorLinea() [][]comprobante.Impuesto {
 // Calcular completa los importes derivados de los detalles: total de cada
 // línea, base y valor de sus impuestos, totalSinImpuestos,
 // totalConImpuestos y valorModificacion. Mismos criterios que
-// factura.Calcular.
+// factura.Factura.Calcular, también al recalcular después de ajustar los
+// detalles para una devolución parcial.
 func (n *NotaCredito) Calcular() {
 	total := decimal.Cero
 	for i := range n.Detalles {
 		d := &n.Detalles[i]
 		d.Descuento = d.Descuento.Redondear(2)
+		anterior := d.PrecioTotalSinImpuesto
 		d.PrecioTotalSinImpuesto = comprobante.TotalLinea(d.Cantidad, d.PrecioUnitario, d.Descuento)
-		comprobante.CalcularImpuestos(d.PrecioTotalSinImpuesto, d.Impuestos)
+		comprobante.RecalcularImpuestos(anterior, d.PrecioTotalSinImpuesto, d.Impuestos)
 		total = total.Sumar(d.PrecioTotalSinImpuesto)
 	}
 	info := &n.InfoNotaCredito
@@ -344,6 +353,7 @@ func (n *NotaCredito) ValidarCon(op OpcionesValidacion) comprobante.Hallazgos {
 		}
 	}
 	impuestos := v.TotalesImpuestos(p+"totalConImpuestos", info.TotalConImpuestos, n.impuestosPorLinea()...)
+	v.Compensaciones(p+"compensaciones", info.Compensaciones, info.TotalConImpuestos)
 	esperado := info.TotalSinImpuestos.Sumar(impuestos)
 	for _, c := range info.Compensaciones {
 		esperado = esperado.Restar(c.Valor)

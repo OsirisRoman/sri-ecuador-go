@@ -10,6 +10,7 @@ import (
 
 	"github.com/OsirisRoman/sri-ecuador-go/comprobante"
 	"github.com/OsirisRoman/sri-ecuador-go/decimal"
+	"github.com/OsirisRoman/sri-ecuador-go/esquema"
 	"github.com/OsirisRoman/sri-ecuador-go/factura"
 )
 
@@ -278,5 +279,61 @@ func TestCatalogoExportadoNoAlteraLaValidacion(t *testing.T) {
 	}
 	if got, _ := comprobante.TarifaIVADe(comprobante.IVA15); !got.Tarifa.Igual(decimal.Entero(15)) {
 		t.Errorf("TarifaIVADe = %s", got.Tarifa)
+	}
+}
+
+// Segunda auditoría, N-05: las compensaciones se restan del importe total,
+// así que se acotan: una compensación no puede superar su tarifa aplicada a
+// la base gravada, ni todas juntas el IVA.
+func TestCompensaciones(t *testing.T) {
+	con := func(cs ...factura.Compensacion) comprobante.Hallazgos {
+		f := sencilla(t) // 100,00 al 15 %
+		f.InfoFactura.Compensaciones = cs
+		f.Calcular()
+		return validar(f)
+	}
+	hs := con(factura.Compensacion{Codigo: "1", Tarifa: d("2"), Valor: d("2.00")})
+	if hs.Err() != nil {
+		t.Errorf("una compensación de 2 puntos sobre la base gravada es válida: %v", hs)
+	}
+	exigir(t, hs, "compensacion.historica", comprobante.Advertencia)
+	exigir(t, con(factura.Compensacion{Codigo: "1", Tarifa: d("2"), Valor: d("114.99")}), "compensacion.valor", comprobante.Error)
+	exigir(t, con(factura.Compensacion{Codigo: "1", Tarifa: d("2"), Valor: d("2.01")}), "compensacion.valor", comprobante.Error)
+	exigir(t, con(factura.Compensacion{Codigo: "1", Tarifa: d("20"), Valor: d("20.00")}), "compensacion.total", comprobante.Error)
+	exigir(t, con(factura.Compensacion{Codigo: "1", Tarifa: d("8"), Valor: d("8.00")}, factura.Compensacion{Codigo: "1", Tarifa: d("8"), Valor: d("8.00")}), "compensacion.total", comprobante.Error)
+	exigir(t, con(factura.Compensacion{Codigo: "99", Tarifa: d("2"), Valor: d("2.00")}), "compensacion.codigo", comprobante.Error)
+	exigir(t, con(factura.Compensacion{Codigo: "1", Tarifa: d("2"), Valor: d("-5.00")}), "negativo", comprobante.Error)
+
+	// Sin IVA no hay nada que compensar.
+	f := sencilla(t)
+	f.Detalles[0].Impuestos[0].CodigoPorcentaje = comprobante.IVA0
+	f.InfoFactura.Compensaciones = []factura.Compensacion{{Codigo: "1", Tarifa: d("2"), Valor: d("2.00")}}
+	f.Calcular()
+	exigir(t, validar(f), "compensacion.valor", comprobante.Error)
+}
+
+// Una tarifa de ICE del 100 % o más (focos incandescentes, armas) cabe en
+// los 4 dígitos del XSD si se escribe sin ceros de relleno.
+func TestTarifaDeICEDeTresDigitos(t *testing.T) {
+	for _, c := range []struct {
+		tarifa string
+		valida bool
+	}{{"100", true}, {"300", true}, {"150.5", true}, {"99.99", true}, {"100.00", false}, {"1000.5", false}, {"100.001", false}} {
+		f := sencilla(t)
+		f.Detalles[0].Impuestos = append([]comprobante.Impuesto{{Codigo: comprobante.ImpuestoICE, CodigoPorcentaje: "3073", Tarifa: d(c.tarifa)}}, f.Detalles[0].Impuestos...)
+		f.Calcular()
+		if hs := validar(f); (hs.Err() == nil) != c.valida {
+			t.Errorf("tarifa %s: %v", c.tarifa, hs)
+		}
+		if !c.valida {
+			continue
+		}
+		doc, err := f.XML()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := esquema.Validar(doc); err != nil {
+			t.Errorf("tarifa %s: XSD: %v", c.tarifa, err)
+		}
 	}
 }

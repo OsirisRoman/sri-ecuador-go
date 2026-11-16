@@ -19,6 +19,8 @@ Comprobantes que la v0.1.0 firmaba ahora se rechazan o cambian de estado. Las re
 - **Estados de autorización:** un estado vacío o desconocido ya no es `EstadoNoAutorizado` sino `EstadoRecibido` con `ErrEstadoIndeterminado`; una respuesta de otra clave u otro ambiente devuelve `ErrRespuestaIncoherente`; una recepción sin estado ya no es `EstadoDevuelto` sino un error `ErrEstadoIndeterminado`. Cómo adaptarse: tratar esos errores como estado desconocido y reintentar con el mismo XML.
 - **Nuevo estado `EstadoDiscrepancia`** (al final de la enumeración: los valores anteriores no cambian), con `*ErrorDiscrepancia`: el SRI tiene otro comprobante registrado con la misma clave. Un `switch` sobre `Estado` debe contemplarlo.
 - **`Parse` de todos los comprobantes** rechaza ahora DOCTYPE, atributos repetidos y documentos que superen los límites del analizador de firmas, y normaliza los valores de atributo según XML 1.0.
+- **Compensaciones acotadas:** nuevos errores `compensacion.codigo`, `compensacion.valor` y `compensacion.total`, y advertencia `compensacion.historica`. Una compensación ya no puede superar su tarifa aplicada a la base gravada con IVA, ni todas juntas el IVA del comprobante. Nuevo error `liquidacion.impuesto` (ICE o IRBPNR en una liquidación, que el XSD ya rechazaba).
+- **`Calcular` recalcula lo que dedujo:** en la v0.1.0, el ICE y el IRBPNR deducidos y el total de un pago único se conservaban al volver a llamar a `Calcular`; ahora siguen a los datos del comprobante. Lo que indica la aplicación se respeta como antes. En la nota de débito, la base de un único IVA se deduce siempre (total sin impuestos más ICE), aunque la aplicación hubiera escrito otra.
 - `sri.Nuevo` rechaza un `Certificado` sin clave privada; `ws.Lote.XML` exige un RUC válido; `ride.Generar` marca como vista previa lo que no viene con la autorización ni con `Opciones.FechaAutorizacion`, y rechaza logotipos de más de 25 megapíxeles.
 
 ### Añadido
@@ -29,12 +31,16 @@ Comprobantes que la v0.1.0 firmaba ahora se rechazan o cambian de estado. Las re
 - `retencion.OpcionesValidacion.SustentoEstricto` y las reglas `retencion.base-iva`, `retencion.base-renta` y `sustento.base-iva` (advertencias).
 - Advertencias `iva.ausente`, `iva.vigencia` (tarifas generales de IVA fuera de su vigencia legal) y `propina.limite`.
 - `comprobante.ImporteRedondeado`, `Validador.ImpuestosDetalle`, `Validador.VigenciaIVA`, `IVAVigente`, `CaracterInvalido`, `Deserializar`, `TarifaIVADe`, `FormaPagoDe`, `PaisDe`; `factura.VigenciaDetalles`; `certificado.Certificado.Utilizable`; `ws.Autorizacion.NoAutorizado`.
+- `comprobante.RecalcularImpuestos`, `comprobante.AsignarPagoUnico` y `Validador.Compensaciones`.
 - CI: `govulncheck` y `go mod verify` (también semanal), contraste con `xmlsec1` y `xmllint` (`internal/interop`), fuzzing breve del analizador XML y acciones fijadas por SHA.
 
 ### Corregido
 
 - El validador aceptaba una línea de 100,00 con IVA declarado de 0,15, dos IVA por línea, un centavo de más por línea acumulado en el total y una tarifa del total incoherente (AUD-001, AUD-003, AUD-010).
 - Reenviar con la misma clave un comprobante distinto terminaba en AUTORIZADO con el XML de otro documento (AUD-002). Una corrección reenviada con la misma clave según la ficha (5.10) queda pendiente mientras el SRI solo muestra el NO AUTORIZADO de la versión anterior.
+- Volver a llamar a `Calcular` después de corregir una cantidad, un precio o una tarifa dejaba el ICE, el IRBPNR y el pago único con los importes anteriores, también en una nota de crédito parcial hecha con `DesdeFactura`: 1 de 10 unidades con ICE del 75 % salía por 977,50 en lugar de 201,25 (segunda auditoría, N-01).
+- `notadebito.Calcular` calculaba el IVA sin incluir el ICE en la base: 125,00 en lugar de 126,50 para 100,00 con ICE del 10 % e IVA del 15 % (N-02).
+- Las compensaciones se restaban del importe total sin ninguna comprobación (N-05).
 - `retencion.Calcular` calculaba el IVA del sustento sobre la base sin redondear.
 - Retenciones con bases mayores que el sustento y notas de crédito mayores que la factura pasaban sin hallazgos (AUD-004).
 - `XMLAutorizado` no escapaba los campos de la autorización (AUD-006).
